@@ -25,13 +25,15 @@ Optional, to send messages *to* Twitch chat from inside RS3 (/t hello):
 
 Protocol (all text/plain, UTF-8, tab-separated so the Lua side needs no JSON):
 
+  (Each path also works under /integrations/rs3chat, matching the Firebot script.)
+
   GET  /poll?since=<id>
        line 1:  OK <TAB> lastId <TAB> twitchState <TAB> claudeState
        then  :  id <TAB> kind <TAB> name <TAB> rrggbb <TAB> text
        kind is one of twitch | claude | you | system. One line per message
        (the plugin wraps to its window width). With --wrap N, messages are
        pre-wrapped and continuation lines have an empty name.
-  POST /claude    body = prompt  ("/clear" resets the conversation)
+  POST /claude    body = prompt, plain text or form field "text" ("/clear" resets)
   POST /twitch    body = message to send to Twitch chat (needs TWITCH_OAUTH)
   GET  /health
 
@@ -403,6 +405,9 @@ class Claude(threading.Thread):
 # ---------------------------------------------------------------------------
 
 
+API_PREFIX = "/integrations/rs3chat"
+
+
 def make_handler(bridge: "Bridge"):
     store = bridge.store
 
@@ -429,19 +434,28 @@ def make_handler(bridge: "Bridge"):
 
         def _body(self) -> str:
             n = min(int(self.headers.get("Content-Length") or 0), 8000)
-            return self.rfile.read(n).decode("utf-8", "replace") if n else ""
+            raw = self.rfile.read(n).decode("utf-8", "replace") if n else ""
+            if "application/x-www-form-urlencoded" in (self.headers.get("Content-Type") or ""):
+                return parse_qs(raw).get("text", [""])[0]  # the plugin sends text=<message>
+            return raw
+
+        def _path(self) -> str:
+            # The plugin uses Firebot's path layout (/integrations/rs3chat/...) for every backend.
+            path = urlparse(self.path).path
+            return path[len(API_PREFIX):] if path.startswith(API_PREFIX + "/") else path
 
         def do_GET(self):  # noqa: N802
             if not self._allowed():
                 return
             url = urlparse(self.path)
-            if url.path == "/poll":
+            path = self._path()
+            if path == "/poll":
                 try:
                     since = int(parse_qs(url.query).get("since", ["0"])[0])
                 except ValueError:
                     since = 0
                 self._reply(200, store.since(since))
-            elif url.path == "/health":
+            elif path == "/health":
                 self._reply(200, "OK\n")
             else:
                 self._reply(404, "not found\n")
@@ -449,7 +463,7 @@ def make_handler(bridge: "Bridge"):
         def do_POST(self):  # noqa: N802
             if not self._allowed():
                 return
-            path = urlparse(self.path).path
+            path = self._path()
             text = self._body()
             if path == "/claude":
                 bridge.ask_claude(text)

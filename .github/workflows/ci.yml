@@ -25,15 +25,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: Install test tools
         run: |
           sudo apt-get update
           sudo apt-get install -y python3-tk xvfb
           python -m pip install lupa pyflakes pillow
+          npm ci --prefix test/firebot-mock || npm install --prefix test/firebot-mock
       - name: Lint
-        run: python -m pyflakes bridge/ build.py
+        run: |
+          python -m pyflakes bridge/ build.py
+          node --check firebot/rs3-twitch-claude-chat.js
       - name: Plugin + bridge end-to-end test (mock Twitch & Claude)
         run: python test/harness.py
+      - name: Plugin + Firebot script end-to-end test (mock Firebot & Claude)
+        run: python test/firebot_test.py
       - name: Desktop app smoke test
         run: |
           mkdir -p shots
@@ -122,9 +130,11 @@ jobs:
             - **Windows:** `RS3ChatBridge-Windows.zip` → unzip, run `RS3ChatBridge.exe` (SmartScreen: More info → Run anyway)
             - **macOS:** `RS3ChatBridge-macOS.zip` → unzip, right-click `RS3ChatBridge.app` → Open (first time only)
             - **Linux:** `RS3ChatBridge-Linux.tar.gz` → extract, run `RS3ChatBridge`, then click **Add to app menu**
+            - **Firebot users:** `rs3-twitch-claude-chat.js` → add as a Firebot startup script instead of running the bridge app (see firebot/README.md)
             - **Plugin for mod.io / dev_plugins:** `twitch-claude-chat-${{ steps.ver.outputs.version }}.zip`
 
             Setup guide: see the README.
           files: |
             assets/*
             twitch-claude-chat-*.zip
+            firebot/rs3-twitch-claude-chat.js

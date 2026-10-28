@@ -1,8 +1,8 @@
 # Privacy notice: Twitch & Claude Chat
 
-_Last updated: 28 October 2026_
+_Last updated: 28 October 2026 (added Firebot)_
 
-This notice explains what information the **Twitch & Claude Chat** RuneScape plugin and its companion **RS3 Chat Bridge** app handle, where that information goes, and your rights.
+This notice explains what information the **Twitch & Claude Chat** RuneScape plugin, its companion **RS3 Chat Bridge** app and its **Firebot script** handle, where that information goes, and your rights.
 
 ## Who is responsible
 
@@ -12,9 +12,9 @@ The developer runs no servers for this plugin and **never receives your data**. 
 
 ## What the plugin does with data
 
-The plugin runs inside the RuneScape client. It sends data **only to the bridge app on your own computer** (`http://127.0.0.1:8787`). It does not send anything over the internet itself.
+The plugin runs inside the RuneScape client. It sends data **only to programs on your own computer**: Firebot with our script (`http://127.0.0.1:7472`), or the bridge app (`http://127.0.0.1:8787`). It does not send anything over the internet itself.
 
-It sends the bridge:
+It sends them:
 - **What you type into the plugin's window**, so it can be passed to Claude or to your Twitch chat.
 - **Your own game chat messages that start with `!tw` or `!c`**. It checks that the sender is your own character; other players' messages are ignored and never sent anywhere.
 - **Requests for new messages** to display. These contain no personal data.
@@ -37,6 +37,15 @@ The bridge **reads your channel's public Twitch chat** so it can show it in the 
 The bridge keeps messages **in memory only** while it's running (up to the most recent 1,000). They're gone when you close it.
 
 If you tick **Remember token and key**, your Anthropic API key and Twitch token are saved in a settings file in your user folder. They aren't encrypted, but the file is readable only by your user account. Untick the box to stop saving them; the saved copies are then removed from the file.
+
+## What the Firebot script does with data
+
+If you use Firebot instead of the bridge app, the Firebot script does the same job as the bridge, as described above:
+- It reads your channel's chat through Firebot's existing Twitch connection.
+- It sends your questions to Anthropic and your `/t` / `!tw` messages to Twitch through Firebot.
+- It keeps messages in memory only while Firebot is running.
+
+Your Anthropic API key is stored in Firebot's settings on your computer. The script only answers requests from the RuneScape client on your own computer.
 
 ## Anthropic and Twitch
 

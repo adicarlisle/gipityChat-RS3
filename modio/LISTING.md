@@ -6,7 +6,7 @@ Paste the fields below into mod.io. The one thing left for you is the **EULA** s
 
 **Name:** Twitch & Claude Chat
 
-**Summary:** A movable chat window that shows your Twitch stream chat inside RuneScape and lets you ask Claude, an AI assistant, questions without leaving the game. Needs the free RS3 Chat Bridge app running on your PC.
+**Summary:** A movable chat window that shows your Twitch stream chat inside RuneScape and lets you ask Claude, an AI assistant, questions without leaving the game. Works with Firebot, or the free RS3 Chat Bridge app.
 
 **Tags:** HttpAccess, chatAccess (plus a category such as Utility)
 
@@ -28,14 +28,17 @@ You can reply to your Twitch chat from inside the game too:
 The plugin does **not** play the game for you or look at other players. It only reads game chat to spot **your own** messages that start with `!tw` or `!c`; everyone else's messages are ignored.
 
 ### What you need (read this first)
-The plugin can't connect to Twitch or Claude by itself, so it talks to a free companion app, **RS3 Chat Bridge**, that runs on your own computer.
+The plugin can't connect to Twitch by itself, so it uses a program on your own computer that already does. It finds one automatically.
 
-1. Download RS3 Chat Bridge for Windows, macOS or Linux: https://github.com/adicarlisle/twitch-claude-chat/releases/latest
-2. Get a Claude API key at https://console.anthropic.com. Claude is a paid service, charged by Anthropic per message.
-3. Open the bridge app, enter your Twitch channel and API key, and click **Start bridge**. To post to Twitch, use **Get token…** in the app.
-4. Install this plugin from the Plugin Hub and allow its permissions.
+**If you stream with Firebot:**
+1. Add our free Firebot startup script: https://github.com/adicarlisle/twitch-claude-chat/blob/main/firebot/README.md
+2. For Claude, enter a Claude API key from https://console.anthropic.com in the script's settings in Firebot. Claude is a paid service, charged by Anthropic per message.
 
-If the bridge isn't running, the window shows **bridge offline** and nothing else happens.
+**If you don't use Firebot:**
+1. Download the free RS3 Chat Bridge app for Windows, macOS or Linux: https://github.com/adicarlisle/twitch-claude-chat/releases/latest
+2. Open it, enter your Twitch channel and Claude API key, and click **Start bridge**.
+
+Then install this plugin from the Plugin Hub and allow its permissions. If neither Firebot nor the bridge is running, the window says **no Firebot or bridge found**.
 
 Full guide: https://github.com/adicarlisle/twitch-claude-chat#readme
 
@@ -58,7 +61,7 @@ Feedback, bug reports and ideas are welcome in this plugin's channel in the Rune
 ### Permissions
 
 #### HttpAccess
-Used to talk to the RS3 Chat Bridge app on your own computer, at `http://127.0.0.1:8787` only. The plugin sends the bridge:
+Used only to talk to programs on your own computer: Firebot with our script at `http://127.0.0.1:7472`, or the RS3 Chat Bridge app at `http://127.0.0.1:8787`. The plugin sends them:
 - the text you type into the plugin's window, to pass on to Claude or your Twitch chat
 - your own `!tw` / `!c` game chat messages (see chatAccess)
 - requests for new messages to show
@@ -71,17 +74,17 @@ Optional. Used for two things:
 - **Chat commands:** spotting **your own** chat messages that start with `!tw` (send to Twitch) or `!c` (ask Claude). The plugin checks that the sender is your own character. Other players' messages are ignored and never sent anywhere.
 
 #### Combine permissions
-With both permissions, your own `!tw` / `!c` messages are passed to the bridge on your computer through HttpAccess, and Twitch and Claude messages can be shown in your chatbox. Other players' chat is never read for any purpose or sent anywhere.
+With both permissions, your own `!tw` / `!c` messages are passed to Firebot or the bridge on your computer through HttpAccess, and Twitch and Claude messages can be shown in your chatbox. Other players' chat is never read for any purpose or sent anywhere.
 
 ### Data Protection (case 3)
-The plugin itself only sends data to your own computer (127.0.0.1). The companion bridge app then sends:
+The plugin itself only sends data to your own computer (127.0.0.1). The Firebot script or the bridge app then sends:
 - what you ask Claude, plus up to the last 25 messages from your Twitch chat as context, to **Anthropic** (United States), using your own API key
 - your `/t` and `!tw` messages, and your Twitch token, to **Twitch** (United States)
 
 It also reads your channel's public Twitch chat.
 
 - **Privacy notice:** https://github.com/adicarlisle/twitch-claude-chat/blob/main/PRIVACY.md
-- **Security:** the bridge only accepts connections from your own computer, and traffic to Anthropic and Twitch is encrypted (HTTPS/TLS). Saved keys are stored in a settings file readable only by your user account.
+- **Security:** the Firebot script and the bridge only accept requests from the game on your own computer, and traffic to Anthropic and Twitch is encrypted (HTTPS/TLS). Keys are stored on your computer: in Firebot's settings, or in the bridge's settings file, readable only by your user account.
 - **Who can access the data:** the developer never receives any data. Anthropic and Twitch process it under their own terms and privacy policies.
 - **Data rights requests:** adi.carlisle@ghostcompany.co.uk
 
@@ -90,5 +93,5 @@ It also reads your channel's public Twitch chat.
 ## Submission checklist
 - [ ] Create the listing on mod.io (RuneScape page → **Add plugin**). Keep it **hidden** until ready.
 - [ ] Paste in the name, summary, tags and description above, with the exact EULA sentence filled in.
-- [ ] Upload `twitch-claude-chat-0.1.1.zip` from the GitHub Release. Tick **Source** and all platforms (Windows, Linux, Android, iOS). Set version `0.1.1`.
+- [ ] Upload `twitch-claude-chat-0.2.0.zip` from the GitHub Release. Tick **Source** and all platforms (Windows, Linux, Android, iOS). Set version `0.2.0`.
 - [ ] Submit, then fill in Jagex's adequacy exception form (data goes to the US). It asks for your name, address and data protection contact.

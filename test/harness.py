@@ -81,7 +81,23 @@ assert http_req("POST", "/claude", "x", headers={"Content-Type": "text/plain"})[
 
 # --- Lua side ---------------------------------------------------------------
 L = lupa.LuaRuntime(unpack_returned_tuples=True)
-L.globals().py_http = lambda method, path, body, headers: http_req(method, path, body, dict(headers.items()) if headers else {})
+FIREBOT_CLOSED_PORT = 17999  # nothing listens here: the plugin must fall back to the bridge
+
+
+def plugin_http(method, base, path, body, headers):
+    port = BRIDGE_PORT if base == "bridge" else FIREBOT_CLOSED_PORT
+    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=body.encode() if body is not None else None,
+                                 method=method, headers=dict(headers.items()) if headers else {})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return True, r.status, r.read().decode()
+    except urllib.error.HTTPError as e:
+        return True, e.code, e.read().decode()
+    except Exception as e:  # noqa
+        return False, 0, str(e)
+
+
+L.globals().py_http = plugin_http
 L.execute(open(os.path.join(ROOT, "test", "stubs.lua")).read())
 L.execute(open(os.path.join(ROOT, "plugin", "twitch-claude-chat", "main.lua")).read())
 G = L.globals()
@@ -100,7 +116,8 @@ s = "\n".join(screen())
 assert "Zezima" in s and "gz on 99" in s, "twitch line shown"
 assert "<lt>col=ff0000<gt>fake red" in s, "markup escaped"
 assert "🎉" not in s and "cafe" in s, "emoji dropped, accent folded"
-assert "live" in G.__status()
+assert "live" in G.__status() and G.__status().startswith("bridge:"), G.__status()
+assert "Connected via bridge." in s, "fell back from Firebot to the bridge"
 
 G.__submit("what should I bring to Zuk?")
 ticks(150)
@@ -183,7 +200,7 @@ G.__press("collapse"); assert G.__root()["h"] == 270
 # Bridge goes away -> offline status, then back.
 bridge.terminate(); bridge.wait()
 ticks(60)
-assert "offline" in G.__status(), G.__status()
+assert "no Firebot or bridge found" in G.__status(), G.__status()
 
 G.PluginShutdown()
 assert G.__subs() == 0, "Logic unsubscribed"

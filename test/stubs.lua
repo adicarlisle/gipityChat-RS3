@@ -63,8 +63,11 @@ end
 ui.Interfaces = { GetComponent = function(self, cid) assert(type(cid) == "number"); return mk("Root", true) end }
 
 PluginPermissions = enum { httpAccess = 1, chatAccess = 2, trackingAccess = 3 }
-local urlUserdata = setmetatable({}, { __concat = function() error("Plugin.urls values can't be concatenated") end })
-Plugin = { urls = { bridge = urlUserdata }, HasPermission = function(p) assert(type(p) == "number"); return true end }
+local function urlValue(name)
+    return setmetatable({ name = name }, { __concat = function() error("Plugin.urls values can't be concatenated") end })
+end
+local URLS = { firebot = urlValue("firebot"), bridge = urlValue("bridge") }
+Plugin = { urls = URLS, HasPermission = function(p) assert(type(p) == "number"); return true end }
 
 local db = {}
 PersistentDB = { Get = function(self, k) return db[k] end, Set = function(self, k, v) db[k] = v end }
@@ -100,14 +103,14 @@ local pending = {}
 local Req = {}
 Req.__index = Req
 HTTPRequest = { new = function(url, path)
-    assert(url == urlUserdata, "first arg must be a Plugin.urls value")
-    return setmetatable({ path = path or "/", headers = {}, active = false }, Req)
+    assert(url == URLS.firebot or url == URLS.bridge, "first arg must be a Plugin.urls value")
+    return setmetatable({ base = rawget(url, "name"), path = path or "/", headers = {}, active = false }, Req)
 end }
 function Req:AddHeader(k, v) assert(not self.active, "AddHeader on active request"); self.headers[k] = v end
 local function run(self, method, body, cb)
     assert(not self.active, "request already active")
     self.active = true
-    local ok, code, data = py_http(method, self.path, body, self.headers)
+    local ok, code, data = py_http(method, self.base, self.path, body, self.headers)
     self.successful, self.failed, self.responseCode, self.data = ok and code == 200, not ok, code, data
     self.finished = true
     pending[#pending + 1] = function() if cb then cb(self) end end

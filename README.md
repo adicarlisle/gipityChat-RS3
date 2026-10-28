@@ -8,9 +8,16 @@ A movable chat window inside the RS3 client that shows your Twitch chat live and
  Claude API ◄─►┘
 ```
 
-**Why two parts?** The official Client Plugin API only gives plugins plain HTTP `GET`/`POST` to URLs declared in `plugin.json`. Plugins get no WebSockets or sockets, and there's no safe place in a plugin for an API key. So a small local program, `bridge.py`, holds the Twitch connection and your Anthropic key, and the plugin polls it twice a second. The bridge is Python 3.9+ and uses only the standard library.
+**How it connects.** The official Client Plugin API only lets plugins make plain HTTP `GET`/`POST` requests to URLs declared in `plugin.json`. Plugins get no WebSockets, so they can't hold a live Twitch chat connection themselves. So the plugin talks to a program on your PC that already holds one, and finds it automatically:
+
+1. **Firebot** (recommended if you stream with it): add the startup script in `firebot/`. See [firebot/README.md](firebot/README.md).
+2. **RS3 Chat Bridge**: a small desktop app in this repo, for anyone not using Firebot.
+
+The plugin tries Firebot first (`127.0.0.1:7472`), then the bridge (`127.0.0.1:8787`), and shows which one it's using.
 
 ## Setup
+
+Using Firebot? Follow [firebot/README.md](firebot/README.md) instead of step 1, then do step 2.
 
 ### 1. Run the bridge
 
@@ -76,9 +83,12 @@ Unmoderated plugins only run on the **plugin beta** client.
 ## CI/CD
 
 `.github/workflows/ci.yml` runs on every push and pull request:
-1. **test**: lints, runs the plugin and bridge end-to-end test against mock Twitch and Claude servers, and smoke-tests the desktop app on a virtual screen (screenshots are uploaded as an artifact).
+1. **test**: lints, then runs:
+   - the plugin and bridge end-to-end test against mock Twitch and Claude servers
+   - the plugin and Firebot-script test against a stand-in for Firebot's web server (`test/firebot-mock`)
+   - a smoke test of the desktop app on a virtual screen (screenshots are uploaded as an artifact)
 2. **build**: builds the desktop app for Windows, macOS and Linux with PyInstaller (`build.py`).
-3. **release** (pushes to `main`): if the `version` in `plugin/twitch-claude-chat/plugin.json` has no GitHub Release yet, it tags `v<version>` and publishes a Release with the three apps plus the mod.io plugin zip.
+3. **release** (pushes to `main`): if the `version` in `plugin/twitch-claude-chat/plugin.json` has no GitHub Release yet, it tags `v<version>` and publishes a Release with the three apps, the Firebot script and the mod.io plugin zip.
 
 To release, bump `version` in `plugin.json` and push to `main`. Pushes that don't change the version just build and test.
 

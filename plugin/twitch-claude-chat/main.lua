@@ -4,8 +4,11 @@
 -- RuneScape 3 and lets you talk to Claude from the same window.
 --
 -- The plugin API can only make HTTP GET/POST requests, so the real work (the
--- Twitch IRC connection and the Claude API key) lives in a small local program,
--- bridge/bridge.py, on 127.0.0.1:8787. This plugin:
+-- Twitch connection and the Claude API key) lives in another program on this PC:
+--   * Firebot, with the rs3-twitch-claude-chat.js startup script (port 7472), or
+--   * the RS3 Chat Bridge app (port 8787).
+-- The plugin tries Firebot first, then the bridge, and uses whichever answers.
+-- This plugin:
 --   * polls the bridge for new messages twice a second and draws them,
 --   * sends what you type in the window's input box to Claude (or to Twitch with /t),
 --   * lets you do the same from the real game chat with !c and !tw,
@@ -48,6 +51,13 @@ local MAX_HISTORY = 300 -- messages kept for scrolling back
 
 local MODES = { "All", "Twitch", "Claude" }
 
+-- Where the chat comes from, in the order we try them. Both serve the same API
+-- under API_PREFIX. Plugin.urls values are opaque: only pass them to HTTPRequest.
+local BACKENDS = {}
+if Plugin.urls.firebot then BACKENDS[#BACKENDS + 1] = { name = "Firebot", url = Plugin.urls.firebot } end
+if Plugin.urls.bridge then BACKENDS[#BACKENDS + 1] = { name = "bridge", url = Plugin.urls.bridge } end
+local API_PREFIX = "/integrations/rs3chat"
+
 ---------------------------------------------------------------------------
 -- Saved settings (PersistentDB keeps them between sessions)
 ---------------------------------------------------------------------------
@@ -83,7 +93,10 @@ local state = {
     lastId = 0, -- newest line id received from the bridge
     firstPollDone = false,
     scroll = 0, -- display lines scrolled up from the bottom
-    bridgeOnline = false,
+    bridgeOnline = false, -- connected to a backend (Firebot or the bridge)
+    backend = 1, -- index into BACKENDS currently being used / tried
+    connectedBackend = nil, -- name of the backend we last connected to
+    failures = 0, -- consecutive failed polls
     twitchState = "off",
     claudeState = "idle",
 
@@ -134,22 +147,29 @@ local function escapeMarkup(s)
     return (string.gsub(s, "[<>]", MARKUP_ESCAPES)) -- one pass, so "<lt>" isn't re-escaped
 end
 
--- Number of characters a string shows on screen: "<lt>" and "<gt>" draw as one.
+-- Number of characters a string shows on screen: "<lt>" and "<gt>" draw as one,
+-- and markup tags such as <col=ffd166> and </col> take no space.
 local function visibleLen(s)
-    local _, escapes = string.gsub(s, "<[lg]t>", "")
-    return #s - 3 * escapes
+    s = string.gsub(s, "<[lg]t>", "x")
+    s = string.gsub(s, "<[^>]*>", "")
+    return #s
 end
 
--- Splits a word into on-screen characters, keeping "<lt>"/"<gt>" whole.
+-- Splits a word into on-screen pieces: { text, width }. "<lt>"/"<gt>" are one
+-- character wide; other tags are kept whole with width 0 so they're never split.
 local function displayChars(word)
     local out, i = {}, 1
     while i <= #word do
         local esc = string.match(word, "^<[lg]t>", i)
+        local tag = not esc and string.match(word, "^<[^<>]*>", i)
         if esc then
-            out[#out + 1] = esc
-            i = i + 4
+            out[#out + 1] = { esc, 1 }
+            i = i + #esc
+        elseif tag then
+            out[#out + 1] = { tag, 0 }
+            i = i + #tag
         else
-            out[#out + 1] = string.sub(word, i, i)
+            out[#out + 1] = { string.sub(word, i, i), 1 }
             i = i + 1
         end
     end
@@ -171,13 +191,13 @@ local function wrapText(text, firstWidth, width)
             if curLen > 0 then newLine() end
             local piece, pl = {}, 0
             for _, ch in ipairs(displayChars(word)) do
-                if pl >= limit then
+                if pl >= limit and ch[2] > 0 then
                     cur = { table.concat(piece) }
                     newLine()
                     piece, pl = {}, 0
                 end
-                piece[#piece + 1] = ch
-                pl = pl + 1
+                piece[#piece + 1] = ch[1]
+                pl = pl + ch[2]
             end
             cur, curLen = { table.concat(piece) }, pl
         else
@@ -379,14 +399,17 @@ local function statusText()
     if state.adjust then
         return "<col=ffd060>click " .. (state.adjust.kind == "move" and "Move" or "Size") .. " again to finish</col>"
     end
+    if #BACKENDS == 0 then
+        return "<col=ff6060>no chat source in plugin.json</col>"
+    end
     if not state.bridgeOnline then
-        return "<col=ff6060>bridge offline</col>"
+        return "<col=ff6060>no Firebot or bridge found</col>"
     end
     local tw = state.twitchState == "connected" and "<col=60ff60>live</col>"
         or (state.twitchState == "off" and "<col=a0a0a0>off</col>" or "<col=ffd060>...</col>")
     local cl = state.claudeState == "thinking" and "<col=d97757>thinking...</col>"
         or (state.claudeState == "nokey" and "<col=ff6060>no key</col>" or "<col=60ff60>ready</col>")
-    return "twitch " .. tw .. "  claude " .. cl
+    return BACKENDS[state.backend].name .. ": twitch " .. tw .. "  claude " .. cl
 end
 
 local function render()
@@ -448,7 +471,7 @@ end
 ---------------------------------------------------------------------------
 
 local function newRequest(path)
-    local req = HTTPRequest.new(Plugin.urls.bridge, path)
+    local req = HTTPRequest.new(BACKENDS[state.backend].url, API_PREFIX .. path)
     -- The bridge refuses requests without this header (see bridge.py).
     req:AddHeader("X-RS3-Bridge", "1")
     return req
@@ -464,14 +487,25 @@ end
 local function handlePoll(req)
     if not req.successful or req.responseCode ~= 200 then
         if state.bridgeOnline then
-            addSystem("Lost the bridge. Is bridge.py running?")
+            addSystem("Lost " .. BACKENDS[state.backend].name .. ". Looking for Firebot or the bridge...")
         end
         state.bridgeOnline = false
-        state.nextPollTick = state.tick + POLL_TICKS_OFFLINE
+        -- Try the next backend. Retry quickly until every one has failed once, then back off.
+        state.failures = state.failures + 1
+        state.backend = state.backend % #BACKENDS + 1
+        state.lastId = 0 -- ids are per backend
+        state.firstPollDone = false
+        state.nextPollTick = state.tick + ((state.failures >= #BACKENDS) and POLL_TICKS_OFFLINE or 5)
         return
     end
+    state.failures = 0
     state.bridgeOnline = true
     state.nextPollTick = state.tick + POLL_TICKS
+    local name = BACKENDS[state.backend].name
+    if state.connectedBackend ~= name then
+        state.connectedBackend = name
+        addSystem("Connected via " .. name .. ".")
+    end
 
     -- The first poll returns recent backlog, which we show but never mirror.
     local mirror = state.firstPollDone
@@ -493,7 +527,7 @@ local function handlePoll(req)
             if last < state.lastId then
                 -- The bridge restarted and its ids began again from 1.
                 state.lastId = 0
-                addSystem("Bridge restarted.")
+                addSystem(BACKENDS[state.backend].name .. " restarted.")
             end
             state.twitchState = f[3] or "off"
             state.claudeState = f[4] or "idle"
@@ -516,21 +550,27 @@ local function handlePoll(req)
     state.firstPollDone = true
 end
 
+-- Percent-encodes text for an application/x-www-form-urlencoded body.
+local function urlEncode(s)
+    return (string.gsub(s, "[^%w%-_%.~]", function(c) return string.format("%%%02X", string.byte(c)) end))
+end
+
 local function queuePost(path, body)
     state.outbox[#state.outbox + 1] = { path = path, body = body }
 end
 
 local function startSend(item)
-    local entry = { done = false, body = item.body } -- body kept alive until done
+    -- Sent as a form field: Firebot's server parses forms (but not plain text).
+    local entry = { done = false, body = "text=" .. urlEncode(item.body) } -- body kept alive until done
     entry.req = newRequest(item.path)
-    entry.req:AddHeader("Content-Type", "text/plain; charset=utf-8")
+    entry.req:AddHeader("Content-Type", "application/x-www-form-urlencoded")
     entry.req:Post(entry.body, function() entry.done = true end)
     state.send = entry
 end
 
 local function handleSend(entry)
     if not entry.req.successful then
-        addSystem("Couldn't reach the bridge, message not sent.")
+        addSystem("Couldn't reach " .. BACKENDS[state.backend].name .. ", message not sent.")
     end
     state.nextPollTick = state.tick -- poll right away to pick up the echo
 end
@@ -766,10 +806,10 @@ local function onLogic(ev)
     end
 
     -- Start new requests (only ever from here, never from a callback).
-    if not state.poll and state.tick >= state.nextPollTick then
+    if #BACKENDS > 0 and not state.poll and state.tick >= state.nextPollTick then
         startPoll()
     end
-    if not state.send and #state.outbox > 0 then
+    if #BACKENDS > 0 and not state.send and #state.outbox > 0 then
         startSend(table.remove(state.outbox, 1))
     end
 
