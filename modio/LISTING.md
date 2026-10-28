@@ -46,13 +46,13 @@ It doesn't play the game for you, and it can't see the game. It just answers que
 ### Keep your questions private
 Your `!c` message is normal game chat, so others in that chat channel can see your question. Only the answer is private. To keep questions private, make a Friends Chat channel with only you in it and ask there.
 
-Full guide: https://github.com/adicarlisle/twitch-claude-chat#readme
+Full guide: https://github.com/adicarlisle/gipityChat-RS3#readme
 
 ### Email
 adi.carlisle@ghostcompany.co.uk
 
 ### Feedback and collaboration
-Feedback, bug reports and ideas are welcome in this plugin's channel in the RuneScape Plugin Portal Discord, by email at adi.carlisle@ghostcompany.co.uk, or as an issue at https://github.com/adicarlisle/twitch-claude-chat/issues. For collaboration, get in touch through any of these.
+Feedback, bug reports and ideas are welcome in this plugin's channel in the RuneScape Plugin Portal Discord, by email at adi.carlisle@ghostcompany.co.uk, or as an issue at https://github.com/adicarlisle/gipityChat-RS3/issues. For collaboration, get in touch through any of these.
 
 ### EULA
 [Paste the exact EULA statement from the example page here. It begins "This Plugin uses software licensed by Jagex to the developer under the terms of the Jagex End User Licence Agreement (EULA)" and links to https://legal.jagex.com/docs/terms/eula]
@@ -86,7 +86,7 @@ When you ask a question, the plugin sends your question and the recent conversat
 - Mistral is in the EU.
 - Ollama and LM Studio run on your own computer.
 
-- **Privacy notice:** https://github.com/adicarlisle/twitch-claude-chat/blob/main/PRIVACY.md
+- **Privacy notice:** https://github.com/adicarlisle/gipityChat-RS3/blob/main/PRIVACY.md
 - **Security:** requests use encrypted connections (HTTPS). API keys are stored only on your computer, in the client's per-plugin settings, and are never shown in chat (only a masked version). Keys typed into chat by mistake are refused and not saved.
 - **Who can access the data:** the developer never receives any data. Each AI provider processes it under its own terms and privacy policy, using your account.
 - **Data rights requests:** adi.carlisle@ghostcompany.co.uk

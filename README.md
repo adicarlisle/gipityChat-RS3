@@ -19,7 +19,7 @@ Built on Jagex's official [RuneScape Client Plugin API](https://developer.runesc
 Unmoderated plugins only run on the **plugin beta** client. With Steam, add this launch option:
 `%command% --configURI rs-launch://world204.runescape.com/jav_config_beta.ws`
 
-1. Download `gipity-chat-<version>.zip` from [Releases](https://github.com/adicarlisle/twitch-claude-chat/releases/latest) and unzip it into a folder called `gipity-chat` inside the beta client's `dev_plugins` folder. Create `dev_plugins` if needed. Typical locations:
+1. Download `gipity-chat-<version>.zip` from [Releases](https://github.com/adicarlisle/gipityChat-RS3/releases/latest) and unzip it into a folder called `gipity-chat` inside the beta client's `dev_plugins` folder. Create `dev_plugins` if needed. Typical locations:
    - Windows: `C:\ProgramData\Jagex\RuneScape-BETA\dev_plugins\gipity-chat`
    - Steam on Linux: `~/.local/share/Steam/steamapps/common/RuneScape/RuneScape-BETA/dev_plugins/gipity-chat`
 2. In game, open the console with **Alt + `** and run:
