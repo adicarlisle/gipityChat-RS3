@@ -3,18 +3,18 @@
 -- Ask an AI (Claude by default, or another provider) from the normal game chat:
 --
 --     !c how do I get to the Kalphite Queen?
---     !ai / !chat / !gc work the same way.
+--     !ai / !chat / !gc work the same way (trigger words are configurable).
 --
--- The answer appears in your chatbox, visible only to you. There's no window:
--- the only UI is a small box for pasting your API key (shown on first use or with
--- "!c /setup"), because a key must never be typed into game chat.
+-- The answer appears in your chatbox, visible only to you. Configuration is in a
+-- small settings panel ("!c /settings", opened automatically on first use);
+-- an API key must never be typed into game chat.
 --
 -- Only YOUR OWN messages are read; other players' chat is ignored and never sent
 -- anywhere. Your "!c" message itself goes to the game server like any chat, so
 -- others in that channel see it. A Friends Chat with only you in it keeps it private.
 --
 -- Files: json.lua (JSON), text.lua (text clean-up), providers.lua (provider list),
--- ai.lua (request/response formats), setup.lua (the API key box).
+-- ai.lua (request/response formats), settings.lua (the settings panel).
 --
 -- Rules we follow from the community's runtime notes on the beta client:
 --   * HTTP requests start only from the Logic event, never from inside another
@@ -27,37 +27,95 @@
 local text = require("text")
 local providers = require("providers")
 local ai = require("ai")
-local setup = require("setup")
+local panel = require("settings")
 
 local NAME = "gipity-chat" -- subscription name, unique to this plugin
 
-local TRIGGERS = { "!c", "!ai", "!chat", "!gc" } -- lower-case; followed by a space
-local MAX_TURNS = 10 -- conversation turns (question + answer) sent as context
-local CHUNK = 180 -- longest piece of a reply per chatbox line
-
-local COLOURS = { ai = "d97757", info = "a0a0a0", error = "ff7070" }
-
 ---------------------------------------------------------------------------
--- Settings (PersistentDB keeps them on this computer, per plugin)
+-- Settings and their choices
 ---------------------------------------------------------------------------
 
-local function loadString(key, default)
+local LENGTHS = { { id = "short", label = "Short" }, { id = "medium", label = "Medium" }, { id = "long", label = "Long" } }
+local MEMORIES = {
+    { id = 0, label = "Off (every question is new)" }, { id = 3, label = "Last 3 exchanges" },
+    { id = 5, label = "Last 5 exchanges" }, { id = 10, label = "Last 10 exchanges" }, { id = 20, label = "Last 20 exchanges" },
+}
+local COLOURS = {
+    { id = "d97757", label = "Orange" }, { id = "ffd166", label = "Gold" }, { id = "7fd1ff", label = "Sky blue" },
+    { id = "60ff60", label = "Green" }, { id = "ff79c6", label = "Pink" }, { id = "c792ea", label = "Purple" },
+    { id = "ffffff", label = "White" },
+}
+local LINE_LENGTHS = {
+    { id = 100, label = "100 characters" }, { id = 140, label = "140 characters" },
+    { id = 180, label = "180 characters" }, { id = 220, label = "220 characters" },
+}
+
+local DEFAULTS = {
+    triggers = "!c !ai !chat !gc",
+    length = "medium",
+    memory = 10,
+    instructions = "",
+    replyName = "",
+    colour = "d97757",
+    lineLength = 180,
+}
+
+local INFO_COLOUR, ERROR_COLOUR = "a0a0a0", "ff7070"
+
+local function loadSetting(key, default)
     local v = PersistentDB:Get(key)
-    if type(v) == "string" then return v end
+    if type(v) == type(default) then return v end
     return default
 end
 
+local function oneOf(list, value, default)
+    for _, item in ipairs(list) do
+        if item.id == value then return value end
+    end
+    return default
+end
+
+local function loadConfig()
+    return {
+        triggers = loadSetting("triggers", DEFAULTS.triggers),
+        length = oneOf(LENGTHS, loadSetting("length", DEFAULTS.length), DEFAULTS.length),
+        memory = oneOf(MEMORIES, loadSetting("memory", DEFAULTS.memory), DEFAULTS.memory),
+        instructions = loadSetting("instructions", DEFAULTS.instructions),
+        replyName = loadSetting("replyName", DEFAULTS.replyName),
+        colour = oneOf(COLOURS, loadSetting("colour", DEFAULTS.colour), DEFAULTS.colour),
+        lineLength = oneOf(LINE_LENGTHS, loadSetting("lineLength", DEFAULTS.lineLength), DEFAULTS.lineLength),
+    }
+end
+
 local state = {
-    provider = providers.find(loadString("provider", "claude")) or providers[1],
+    provider = providers.find(loadSetting("provider", "claude")) or providers[1],
+    config = loadConfig(),
+    triggers = {}, -- parsed from config.triggers
     convo = {}, -- conversation sent to the AI: { role, content }
     queue = {}, -- questions waiting to be sent
     pending = nil, -- { req, done, body, provider, question } for the request in flight
 }
 
+-- Trigger words: space-separated, lower-cased. Each must start with a symbol
+-- (like ! or ?) so normal chat can't set it off by accident.
+local function parseTriggers(s)
+    local out, bad = {}, {}
+    for word in string.gmatch(string.lower(s or ""), "%S+") do
+        if string.match(word, "^[%p]") and #word >= 2 then
+            out[#out + 1] = word
+        else
+            bad[#bad + 1] = word
+        end
+    end
+    return out, bad
+end
+state.triggers = parseTriggers(state.config.triggers)
+if #state.triggers == 0 then state.triggers = parseTriggers(DEFAULTS.triggers) end
+
 -- Keys and models are saved per provider.
-local function apiKey(p) return loadString("key." .. p.id, "") end
+local function apiKey(p) return loadSetting("key." .. p.id, "") end
 local function setApiKey(p, key) PersistentDB:Set("key." .. p.id, key) end
-local function model(p) return loadString("model." .. p.id, p.model) end
+local function model(p) return loadSetting("model." .. p.id, p.model) end
 local function setModel(p, m) PersistentDB:Set("model." .. p.id, m) end
 
 -- Shows only the start and end of a key, e.g. "sk-ant-...wXyZ".
@@ -66,6 +124,8 @@ local function maskKey(key)
     return string.sub(key, 1, 7) .. "..." .. string.sub(key, -4)
 end
 
+local function firstTrigger() return state.triggers[1] end
+
 ---------------------------------------------------------------------------
 -- Writing to the chatbox (local only: Chat.AddMessage is never sent to the server)
 ---------------------------------------------------------------------------
@@ -73,36 +133,104 @@ end
 -- `displayText` must already be cleaned (text.forDisplay or text.escapeMarkup).
 -- Long text is split at word boundaries; the label only goes on the first line.
 local function say(label, colour, displayText)
-    local lines = text.wrap(displayText, CHUNK, CHUNK)
-    for i, line in ipairs(lines) do
+    local width = state.config.lineLength
+    for i, line in ipairs(text.wrap(displayText, width, width)) do
         if i == 1 and label then
             Chat.AddMessage(formatStr("<col={}>{}:</col> {}", colour, label, line) or line)
+        elseif label then
+            Chat.AddMessage(line)
         else
-            Chat.AddMessage(formatStr("<col={}>{}</col>", label and "ffffff" or colour, line) or line)
+            Chat.AddMessage(formatStr("<col={}>{}</col>", colour, line) or line)
         end
     end
 end
 
-local function info(s) say(nil, COLOURS.info, text.escapeMarkup("[gipityChat] " .. s)) end
-local function warn(s) say(nil, COLOURS.error, text.escapeMarkup("[gipityChat] " .. s)) end
+local function info(s) say(nil, INFO_COLOUR, text.escapeMarkup("[gipityChat] " .. s)) end
+local function warn(s) say(nil, ERROR_COLOUR, text.escapeMarkup("[gipityChat] " .. s)) end
 
 ---------------------------------------------------------------------------
--- API key box
+-- Settings panel
 ---------------------------------------------------------------------------
 
-local function openSetup()
-    local p = state.provider
-    if not p.needsKey then
-        info(p.name .. " runs on your PC and needs no key. Set a model with: !c /model NAME")
-        return
+local function keyLabel(providerId)
+    local p = providers.find(providerId)
+    if not p.needsKey then return "not needed (runs on your PC)" end
+    local k = apiKey(p)
+    return (k ~= "") and maskKey(k) or "not set"
+end
+
+local function providerChoices()
+    local list = {}
+    for _, p in ipairs(providers) do
+        list[#list + 1] = { id = p.id, label = p.name, examples = "e.g. " .. p.examples }
     end
-    setup.open({
-        title = "gipityChat - " .. p.name .. " API key",
-        hint = "Get a key at " .. p.keyFrom .. ". Paste it below. It's saved on this computer only.",
-        current = apiKey(p) ~= "" and maskKey(apiKey(p)) or nil,
-        onSave = function(key)
-            setApiKey(p, key)
-            info(p.name .. " key saved (" .. maskKey(key) .. "). Ask with: !c your question")
+    return list
+end
+
+local function applySettings(values, newKey)
+    local p = providers.find(values.provider) or state.provider
+    state.provider = p
+    PersistentDB:Set("provider", p.id)
+    setModel(p, text.trim(values.model or ""))
+    if newKey then
+        if p.needsKey then
+            setApiKey(p, newKey)
+        else
+            info(p.name .. " runs on your PC and doesn't use a key, so the key wasn't saved.")
+        end
+    end
+
+    -- Triggers: keep the old ones if none of the new ones are usable.
+    local trig, bad = parseTriggers(values.triggers)
+    if #bad > 0 then
+        warn("Ignored trigger words (they must start with a symbol like ! or ?): " .. table.concat(bad, " "))
+    end
+    if #trig == 0 then
+        warn("No usable trigger words - keeping " .. table.concat(state.triggers, " "))
+    else
+        state.triggers = trig
+    end
+
+    local cfg = state.config
+    cfg.triggers = table.concat(state.triggers, " ")
+    cfg.length = oneOf(LENGTHS, values.length, cfg.length)
+    cfg.memory = oneOf(MEMORIES, values.memory, cfg.memory)
+    cfg.instructions = text.trim(values.instructions or "")
+    cfg.replyName = text.trim(values.replyName or "")
+    cfg.colour = oneOf(COLOURS, values.colour, cfg.colour)
+    cfg.lineLength = oneOf(LINE_LENGTHS, values.lineLength, cfg.lineLength)
+    for k, v in pairs(cfg) do PersistentDB:Set(k, v) end
+
+    local status
+    if p.needsKey and apiKey(p) == "" then
+        status = "no API key yet - add one in " .. firstTrigger() .. " /settings"
+    elseif model(p) == "" then
+        status = "no model set - add one in " .. firstTrigger() .. " /settings"
+    else
+        status = "ready. Ask with: " .. firstTrigger() .. " your question"
+    end
+    info("Settings saved. " .. p.name .. " (" .. (model(p) ~= "" and model(p) or "no model") .. "), " .. status)
+end
+
+local function openSettings()
+    local values = {}
+    for k, v in pairs(state.config) do values[k] = v end
+    values.provider = state.provider.id
+    values.model = model(state.provider)
+    local defaults = {}
+    for k, v in pairs(DEFAULTS) do defaults[k] = v end
+    panel.open({
+        values = values,
+        defaults = defaults,
+        choices = { providers = providerChoices(), lengths = LENGTHS, memories = MEMORIES,
+                    colours = COLOURS, lineLengths = LINE_LENGTHS },
+        keyLabel = keyLabel,
+        modelFor = function(providerId) return model(providers.find(providerId)) end,
+        onSave = applySettings,
+        onForgetKey = function(providerId)
+            local p = providers.find(providerId)
+            setApiKey(p, "")
+            info(p.name .. " key removed from this computer.")
         end,
     })
 end
@@ -115,21 +243,28 @@ local function startRequest(question)
     local p = state.provider
     local key, m = apiKey(p), model(p)
     if p.needsKey and key == "" then
-        warn("No " .. p.name .. " API key yet - opening the key box.")
-        openSetup()
+        warn("No " .. p.name .. " API key yet - opening settings.")
+        openSettings()
         return
     end
     if m == "" then
-        warn("Choose a " .. p.name .. " model first: !c /model NAME  (" .. p.examples .. ")")
+        warn("Choose a " .. p.name .. " model first - opening settings.")
+        openSettings()
         return
     end
-    -- Recent conversation plus the new question.
+    -- Recent conversation (as much as the Memory setting allows) plus the new question.
     local convo = {}
-    local first = math.max(1, #state.convo - MAX_TURNS * 2 + 1)
-    for i = first, #state.convo do convo[#convo + 1] = state.convo[i] end
+    local keep = state.config.memory * 2
+    for i = math.max(1, #state.convo - keep + 1), #state.convo do
+        if keep > 0 then convo[#convo + 1] = state.convo[i] end
+    end
     convo[#convo + 1] = { role = "user", content = question }
 
-    local built = ai.buildRequest(p, key, m, convo)
+    local length = ai.LENGTHS[state.config.length] or ai.LENGTHS.medium
+    local built = ai.buildRequest(p, key, m, convo, {
+        system = ai.systemPrompt(state.config.length, state.config.instructions),
+        maxTokens = length.tokens,
+    })
     local entry = { done = false, body = built.body, provider = p, question = question } -- body kept alive
     entry.req = HTTPRequest.new(Plugin.urls[p.url], built.path)
     for _, h in ipairs(built.headers) do
@@ -148,8 +283,9 @@ local function finishRequest(entry)
     end
     state.convo[#state.convo + 1] = { role = "user", content = entry.question }
     state.convo[#state.convo + 1] = { role = "assistant", content = reply }
-    while #state.convo > MAX_TURNS * 2 do table.remove(state.convo, 1) end
-    say(p.name, COLOURS.ai, text.forDisplay(reply))
+    while #state.convo > 40 do table.remove(state.convo, 1) end
+    local name = state.config.replyName ~= "" and text.escapeMarkup(text.toGameText(state.config.replyName)) or p.name
+    say(name, state.config.colour, text.forDisplay(reply))
 end
 
 ---------------------------------------------------------------------------
@@ -157,40 +293,32 @@ end
 ---------------------------------------------------------------------------
 
 local function showHelp()
-    info("Ask: !c QUESTION  (also !ai, !chat or !gc). Answers show only to you.")
-    info("!c /setup - enter or change your API key (opens a small box; never type keys in chat)")
-    info("!c /provider - list AIs;  !c /provider NAME - switch (e.g. openai, gemini, ollama)")
-    info("!c /model - show model;  !c /model NAME - change it")
-    info("!c /new - start a new conversation;  !c /forget - delete the saved key")
-    info("Tip: others in the chat channel see your !c messages. Use a Friends Chat with only you in it to keep them private.")
-end
-
-local function listProviders()
-    local parts = {}
-    for _, p in ipairs(providers) do
-        local note = p.needsKey and ((apiKey(p) ~= "") and "key saved" or "no key") or "on your PC"
-        parts[#parts + 1] = p.id .. ((p == state.provider) and "*" or "") .. " (" .. note .. ")"
-    end
-    info("Providers: " .. table.concat(parts, ", ") .. ". * = current. Switch: !c /provider NAME")
+    local t = firstTrigger()
+    info("Ask: " .. t .. " QUESTION  (triggers: " .. table.concat(state.triggers, " ") .. "). Answers show only to you.")
+    info(t .. " /settings - provider, model, API key, trigger words, answer style, display")
+    info(t .. " /provider NAME - quick switch;  " .. t .. " /model NAME - quick change;  " .. t .. " /new - new conversation")
+    info("Never type API keys in chat. Others in the chat channel see your questions - use a Friends Chat with only you in it to keep them private.")
 end
 
 local function runCommand(cmd, arg)
     local p = state.provider
     if cmd == "help" then
         showHelp()
-    elseif cmd == "setup" or cmd == "key" then
-        if arg ~= "" then
+    elseif cmd == "settings" or cmd == "setup" or cmd == "config" or cmd == "key" then
+        if cmd == "key" and arg ~= "" then
             -- Too late to keep it secret: it already went out as chat.
             warn("Don't type keys in chat - others can see them, and they're sent to the game server. "
                 .. "If that was a real key, delete it at " .. p.keyFrom .. " and make a new one.")
         end
-        openSetup()
+        openSettings()
     elseif cmd == "forget" then
         setApiKey(p, "")
         info(p.name .. " key removed from this computer.")
     elseif cmd == "provider" then
         if arg == "" then
-            listProviders()
+            local parts = {}
+            for _, q in ipairs(providers) do parts[#parts + 1] = q.id .. ((q == p) and "*" or "") end
+            info("Providers: " .. table.concat(parts, ", ") .. " (* = current). Switch: " .. firstTrigger() .. " /provider NAME")
             return
         end
         local np = providers.find(arg)
@@ -201,11 +329,7 @@ local function runCommand(cmd, arg)
         state.provider = np
         PersistentDB:Set("provider", np.id)
         info("Now using " .. np.name .. " (" .. (model(np) ~= "" and model(np) or "no model set") .. ").")
-        if np.needsKey and apiKey(np) == "" then
-            openSetup()
-        elseif model(np) == "" then
-            info("Choose a model: !c /model NAME  (" .. np.examples .. ")")
-        end
+        if (np.needsKey and apiKey(np) == "") or model(np) == "" then openSettings() end
     elseif cmd == "model" then
         if arg == "" then
             info(p.name .. " model: " .. (model(p) ~= "" and model(p) or "not set") .. ". Examples: " .. p.examples)
@@ -217,7 +341,7 @@ local function runCommand(cmd, arg)
         state.convo = {}
         info("New conversation.")
     else
-        warn("Unknown command /" .. cmd .. ". Try: !c /help")
+        warn("Unknown command /" .. cmd .. ". Try: " .. firstTrigger() .. " /help")
     end
 end
 
@@ -259,7 +383,7 @@ local function afterTrigger(msg)
     local first, rest = string.match(msg, "^(%S+)%s*(.-)%s*$")
     if not first then return nil end
     first = string.lower(first)
-    for _, t in ipairs(TRIGGERS) do
+    for _, t in ipairs(state.triggers) do
         if first == t then return rest end
     end
     return nil
@@ -309,17 +433,19 @@ Event.Logic.Subscribe(NAME, onLogic)
 local chatSubscribed = false
 if not Plugin.HasPermission(PluginPermissions.chatAccess) then
     -- Without chatAccess we can neither read !c nor show replies; there's nothing to do.
-    print("[gipityChat] needs the chatAccess permission to read !c and show replies.")
+    print("[gipityChat] needs the chatAccess permission to read " .. firstTrigger() .. " and show replies.")
 else
     Event.ChatMessage.Subscribe(NAME, onGameChat)
     chatSubscribed = true
     if not Plugin.HasPermission(PluginPermissions.httpAccess) then
         warn("Needs the httpAccess permission to reach the AI provider.")
     elseif state.provider.needsKey and apiKey(state.provider) == "" then
-        info("Welcome! Paste your " .. state.provider.name .. " API key in the box, then ask with: !c your question")
-        openSetup()
+        info("Welcome! Add your " .. state.provider.name .. " API key in the settings panel, then ask with: "
+            .. firstTrigger() .. " your question")
+        openSettings()
     else
-        info("Ready (" .. state.provider.name .. "). Ask with: !c your question   Help: !c /help")
+        info("Ready (" .. state.provider.name .. "). Ask with: " .. firstTrigger() .. " your question   Settings: "
+            .. firstTrigger() .. " /settings")
     end
 end
 
@@ -333,5 +459,5 @@ function PluginShutdown()
         local req = state.pending.req
         pcall(function() req:Cancel() end)
     end
-    setup.close()
+    panel.close()
 end

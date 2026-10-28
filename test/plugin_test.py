@@ -90,7 +90,7 @@ def chatlog(G):
 def joined(G):
     """The chat log with colour tags removed and wrapped lines joined back up."""
     s = " ".join(chatlog(G))
-    for tag in ("<col=d97757>", "<col=a0a0a0>", "<col=ff7070>", "<col=ffffff>", "</col>"):
+    for tag in ("<col=d97757>", "<col=a0a0a0>", "<col=ff7070>", "<col=ffd166>", "</col>"):
         s = s.replace(tag, "")
     return s
 
@@ -120,38 +120,47 @@ assert(text.toGameText("A \\226\\128\\148 caf\\195\\169 \\240\\159\\142\\137 \\2
 assert(text.forDisplay("**bold** `x` <img=1>") == "bold x <lt>img=1<gt>")
 """)
 
-# --- First run: no key ---------------------------------------------------------
+def save_key(G, key):
+    """Paste a key into the settings panel and press Enter."""
+    G.__enterKey(key.encode() if isinstance(key, str) else key)
+
+
+# --- First run: no key -> settings panel opens ------------------------------------
 log = chatlog(G)
-assert any("Welcome! Paste your Claude API key" in l for l in log), log
-assert G.__setupOpen(), "key box opens on first run"
-assert "console.anthropic.com" in G.__setupText().decode()
+assert any("Welcome! Add your Claude API key in the settings panel" in l for l in log), log
+assert G.__panelOpen(), "settings open on first run"
+panel = G.__panelText().decode()
+assert "gipityChat settings" in panel and "current: not set - paste a new key to replace" in panel, panel
+assert G.__chooserText(b"provider") == b"Claude" and G.__getField(b"model") == b"claude-haiku-5-5"
+assert G.__chooserText(b"length") == b"Medium" and G.__chooserText(b"memory") == b"Last 10 exchanges"
 G.__pressButton(b"Cancel")
-assert not G.__setupOpen()
+assert not G.__panelOpen()
 
-# Asking without a key reopens the box.
+# Asking without a key reopens settings.
 say(G, "!c hello"); ticks(G, 5)
-assert G.__setupOpen() and any("No Claude API key yet" in l for l in chatlog(G))
+assert G.__panelOpen() and any("No Claude API key yet - opening settings." in l for l in chatlog(G))
 
-# A wrong key is reported plainly.
-G.__pasteKey(b"  sk-ant-bad \n")
-assert not G.__setupOpen() and G.__db[b"key.claude"] == b"sk-ant-bad"
+# A wrong key is reported plainly (and pasted whitespace is stripped).
+save_key(G, "  sk-ant-bad \n")
+assert not G.__panelOpen() and G.__db[b"key.claude"] == b"sk-ant-bad"
 say(G, "!c hello again"); ticks(G, 10)
-assert "HTTP 401: the API key was rejected - set it again with !c /setup (invalid x-api-key)" in joined(G), chatlog(G)[-3:]
+assert "HTTP 401: the API key was rejected - set it again in !c /settings (invalid x-api-key)" in joined(G), chatlog(G)[-3:]
 
-# Typing a key in chat: warned, NOT saved, box opens instead.
+# Typing a key in chat: warned, NOT saved, settings open instead.
 say(G, "!c /key sk-ant-leaked"); ticks(G, 3)
 assert G.__db[b"key.claude"] == b"sk-ant-bad", "keys typed in chat are never saved"
-assert any("Don't type keys in chat" in l for l in chatlog(G)) and G.__setupOpen()
-G.__pasteKey(b"sk-ant-good-0001")
-assert any("Claude key saved (sk-ant-...0001)." in l for l in chatlog(G)), chatlog(G)[-2:]
+assert any("Don't type keys in chat" in l for l in chatlog(G)) and G.__panelOpen()
+assert "current: **********" in G.__panelText().decode()  # short keys fully masked
+save_key(G, "sk-ant-good-0001")
+assert "Settings saved. Claude (claude-haiku-5-5), ready. Ask with: !c your question" in joined(G), chatlog(G)[-2:]
 
 # --- Asking -----------------------------------------------------------------------
-n_calls = len(CALLS)
 say(G, "!c how do I kill the Kalphite Queen?"); ticks(G, 10)
 base, path, headers, body = CALLS[-1]
 assert (base, path) == ("anthropic", "/v1/messages")
 assert headers["anthropic-version"] == "2023-06-01" and body["model"] == "claude-haiku-5-5" and body["max_tokens"] == 400
-assert "RuneScape 3" in body["system"] and body["messages"] == [{"role": "user", "content": "how do I kill the Kalphite Queen?"}]
+assert "RuneScape 3" in body["system"] and "about 80 words" in body["system"]
+assert body["messages"] == [{"role": "user", "content": "how do I kill the Kalphite Queen?"}]
 replies = chatlog(G)[-6:]
 first = [l for l in replies if "Claude:</col>" in l]
 assert first and first[0].startswith("<col=d97757>Claude:</col> Sure! For the Kalphite Queen - bring a Dramen staff"), replies
@@ -179,40 +188,85 @@ assert asked == ["friends chat question"], asked
 
 # Latin-1 bytes from the client become valid JSON.
 say(G, b"!c caf\xe9?"); ticks(G, 10)
-assert CALLS[-1][3]["messages"][-1]["content"] == "café?"
+assert CALLS[-1][3]["messages"][-1]["content"] == "caf\u00e9?"
 
-# --- Other providers ------------------------------------------------------------
-say(G, "!c /provider gpt"); ticks(G, 3)
-assert any("Now using OpenAI (gpt-5.4-mini)" in l for l in chatlog(G)) and G.__setupOpen()
-G.__pasteKey(b"sk-openai-good")
+# --- Settings: answers, triggers, display ------------------------------------------
+say(G, "!c /settings"); ticks(G, 2)
+assert G.__panelOpen()
+G.__press(b"length", b"prev")                        # Medium -> Short
+G.__press(b"memory", b"next")                        # 10 -> 20
+G.__press(b"memory", b"next")                        # 20 -> Off (wraps)
+G.__setField(b"instructions", b"Talk like a pirate.")
+G.__setField(b"triggers", b"?gip !Q hello")           # "hello" has no symbol: ignored
+G.__setField(b"replyName", b"Wise <Old> Man")
+G.__press(b"colour", b"next")                         # Orange -> Gold
+G.__press(b"lineLength", b"prev")                     # 180 -> 140
+assert G.__chooserText(b"length") == b"Short" and G.__chooserText(b"memory") == b"Off (every question is new)"
+G.__press(b"save")
+assert not G.__panelOpen()
+assert any("Ignored trigger words (they must start with a symbol like ! or ?): hello" in l for l in chatlog(G))
+assert G.__db[b"triggers"] == b"?gip !q" and G.__db[b"length"] == b"short" and G.__db[b"memory"] == 0
+
+n = len(CALLS)
+say(G, "!c old trigger no longer works"); ticks(G, 5)
+assert len(CALLS) == n
+say(G, "?gip tell me about Gielinor"); ticks(G, 10)
+_, _, _, body = CALLS[-1]
+assert body["max_tokens"] == 200 and "about 50 words" in body["system"], body["system"][:400]
+assert body["system"].endswith("The player's own instructions for you: Talk like a pirate.")
+assert len(body["messages"]) == 1, "memory off: no history sent"
+assert any(l.startswith("<col=ffd166>Wise <lt>Old<gt> Man:</col> You said: tell me about Gielinor") for l in chatlog(G)), chatlog(G)[-2:]
+say(G, "!q " + "word " * 80); ticks(G, 10)
+long_lines = [l for l in chatlog(G)[-6:] if "word word" in l]
+assert len(long_lines) >= 3 and all(len(l.replace("<col=ffd166>Wise <lt>Old<gt> Man:</col> ", "")) <= 140 for l in long_lines)
+
+# Defaults button resets style settings but keeps provider/model; Save applies.
+say(G, "?gip /settings"); ticks(G, 2)
+G.__press(b"defaults")
+assert G.__getField(b"triggers") == b"!c !ai !chat !gc" and G.__chooserText(b"length") == b"Medium"
+G.__press(b"save")
+assert G.__db[b"triggers"] == b"!c !ai !chat !gc" and G.__db[b"colour"] == b"d97757" and G.__db[b"memory"] == 10
+
+# --- Other providers (switched in the panel) ----------------------------------------
+say(G, "!c /settings"); ticks(G, 2)
+G.__press(b"provider", b"next")                       # Claude -> OpenAI
+assert G.__chooserText(b"provider") == b"OpenAI" and G.__getField(b"model") == b"gpt-5.4-mini"
+assert "current: not set" in G.__panelText().decode() and "e.g. gpt-5.4-mini" in G.__panelText().decode()
+save_key(G, "sk-openai-good")
 say(G, "!c hi openai"); ticks(G, 10)
 base, path, headers, body = CALLS[-1]
 assert (base, path) == ("openai", "/v1/chat/completions") and headers["authorization"] == "Bearer sk-openai-good"
 assert body["messages"][0]["role"] == "system" and body["model"] == "gpt-5.4-mini" and "max_tokens" not in body
 assert any("<col=d97757>OpenAI:</col> OpenAI-style: hi openai" in l for l in chatlog(G))
+assert G.__db[b"key.claude"] == b"sk-ant-good-0001", "keys are per provider"
 
 say(G, "!c /model missing-model"); say(G, "!c test"); ticks(G, 10)
-assert "HTTP 404: model not found - set a valid one with !c /model" in joined(G), chatlog(G)[-2:]
+assert "HTTP 404: model not found - set a valid one in !c /settings" in joined(G), chatlog(G)[-2:]
 
 say(G, "!c /provider gemini"); ticks(G, 3)
-G.__pasteKey(b"sk-openai-good")  # the mock accepts this key for every OpenAI-style provider
+assert G.__panelOpen(), "switching to a provider without a key opens settings"
+save_key(G, "sk-openai-good")  # the mock accepts this key for every OpenAI-style provider
 say(G, "!c gemini test"); ticks(G, 10)
 assert CALLS[-1][:2] == ("gemini", "/v1beta/openai/chat/completions") and CALLS[-1][3]["model"] == "gemini-flash-latest"
 
 say(G, "!c /provider ollama"); ticks(G, 3)
-assert not G.__setupOpen(), "local providers need no key"
-say(G, "!c local question"); ticks(G, 5)
-assert any("Choose a Ollama model first" in l for l in chatlog(G)), chatlog(G)[-2:]
-say(G, "!c /model llama3.2"); say(G, "!c local question"); ticks(G, 10)
+assert G.__panelOpen() and "not needed (runs on your PC)" in G.__panelText().decode()
+G.__setField(b"model", b"llama3.2")
+G.__press(b"save")
+say(G, "!c local question"); ticks(G, 10)
 assert any("couldn't reach Ollama - is it running on this PC?" in l for l in chatlog(G)), chatlog(G)[-2:]
 
 say(G, "!c /provider nope"); ticks(G, 3)
 assert any("Unknown provider 'nope'" in l for l in chatlog(G))
-say(G, "!c /provider"); ticks(G, 3)
-assert "Providers: claude (key saved), openai (key saved), gemini (key saved)" in joined(G), chatlog(G)[-2:]
+
+# Forget button in the panel.
+say(G, "!c /provider claude"); say(G, "!c /settings"); ticks(G, 3)
+G.__press(b"forget")
+assert G.__db[b"key.claude"] == b"" and "current: not set" in G.__panelText().decode()
+save_key(G, "sk-ant-good-0001")
 
 # --- Housekeeping commands --------------------------------------------------------
-say(G, "!c /provider claude"); say(G, "!c /new"); say(G, "!c fresh start"); ticks(G, 10)
+say(G, "!c /new"); say(G, "!c fresh start"); ticks(G, 10)
 assert CALLS[-1][3]["messages"] == [{"role": "user", "content": "fresh start"}]
 say(G, "!c"); ticks(G, 3)
 assert any("Ask: !c QUESTION" in l for l in chatlog(G)), "bare trigger shows help"
@@ -224,15 +278,15 @@ assert any("Unknown command /wat" in l for l in chatlog(G))
 # Every line the plugin writes is a single chat line of sensible length.
 for line in chatlog(G):
     visible = line.replace("<lt>", "<").replace("<gt>", ">")
-    for tag in ("<col=d97757>", "<col=a0a0a0>", "<col=ff7070>", "<col=ffffff>", "</col>"):
+    for tag in ("<col=d97757>", "<col=a0a0a0>", "<col=ff7070>", "<col=ffd166>", "</col>"):
         visible = visible.replace(tag, "")
-    assert len(visible) <= 200, (len(visible), line)
+    assert len(visible) <= 240, (len(visible), line)
 
-# Shutdown removes every subscription and closes the box.
-say(G, "!c /setup"); ticks(G, 2)
-assert G.__setupOpen()
+# Shutdown removes every subscription and closes the panel.
+say(G, "!c /settings"); ticks(G, 2)
+assert G.__panelOpen()
 G.PluginShutdown()
-assert G.__subs() == 0 and not G.__setupOpen()
+assert G.__subs() == 0 and not G.__panelOpen()
 
 # --- Without chatAccess the plugin stays quiet and subscribes to nothing but Logic ---
 L2, G2 = new_runtime(perms=(True, False))

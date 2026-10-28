@@ -20,9 +20,29 @@ Be helpful with RuneScape 3 questions (skilling, bossing, quests, money making, 
 
 ai.MAX_TOKENS = 400
 
+-- Reply-length settings: wording added to the instructions, and Claude's token cap.
+ai.LENGTHS = {
+    short = { label = "Short", tokens = 200, words = "usually 1-2 sentences, never more than about 50 words" },
+    medium = { label = "Medium", tokens = 400, words = "usually 1-3 sentences, never more than about 80 words" },
+    long = { label = "Long", tokens = 800, words = "a short paragraph when needed, never more than about 160 words" },
+}
+
+-- The system prompt for a reply length plus the player's own instructions.
+function ai.systemPrompt(length, instructions)
+    local l = ai.LENGTHS[length] or ai.LENGTHS.medium
+    local s = string.gsub(ai.SYSTEM_PROMPT, "usually 1%-3 sentences, never more than about 80 words", l.words)
+    if instructions and instructions ~= "" then
+        s = s .. "\n\nThe player's own instructions for you: " .. instructions
+    end
+    return s
+end
+
 -- Returns { path, headers = {{name, value}...}, body } for one request.
 -- `history` is a list of { role = "user"|"assistant", content = "..." }.
-function ai.buildRequest(provider, apiKey, model, history)
+-- `opts` (optional): { system = prompt text, maxTokens = number }
+function ai.buildRequest(provider, apiKey, model, history, opts)
+    opts = opts or {}
+    local system = opts.system or ai.SYSTEM_PROMPT
     local headers = { { "Content-Type", "application/json" } }
     local body
     if provider.format == "anthropic" then
@@ -30,15 +50,15 @@ function ai.buildRequest(provider, apiKey, model, history)
         headers[#headers + 1] = { "anthropic-version", "2023-06-01" }
         body = {
             model = model,
-            max_tokens = ai.MAX_TOKENS,
-            system = ai.SYSTEM_PROMPT,
+            max_tokens = opts.maxTokens or ai.MAX_TOKENS,
+            system = system,
             messages = history,
         }
     else
         if apiKey and apiKey ~= "" then
             headers[#headers + 1] = { "Authorization", "Bearer " .. apiKey }
         end
-        local messages = { { role = "system", content = ai.SYSTEM_PROMPT } }
+        local messages = { { role = "system", content = system } }
         for _, m in ipairs(history) do messages[#messages + 1] = m end
         -- No token limit here: providers disagree on the parameter's name, and the
         -- system prompt already asks for short answers.
@@ -49,10 +69,10 @@ end
 
 -- Plain-English explanation for common HTTP failures.
 local function explainStatus(code, provider)
-    if code == 400 then return "the request was rejected (check the model name with !c /model)" end
-    if code == 401 or code == 403 then return "the API key was rejected - set it again with !c /setup" end
+    if code == 400 then return "the request was rejected (check the model name in !c /settings)" end
+    if code == 401 or code == 403 then return "the API key was rejected - set it again in !c /settings" end
     if code == 402 then return "your account is out of credit" end
-    if code == 404 then return "model not found - set a valid one with !c /model (" .. provider.examples .. ")" end
+    if code == 404 then return "model not found - set a valid one in !c /settings (" .. provider.examples .. ")" end
     if code == 408 or code == 504 then return "the request timed out - try again" end
     if code == 429 then return "rate limited or out of quota - wait a moment, or check your plan" end
     if code == 500 or code == 502 or code == 503 or code == 529 then return provider.name .. " is busy or down - try again shortly" end

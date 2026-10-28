@@ -12,15 +12,15 @@ The developer runs no servers for this plugin and **never receives your data**. 
 
 ## What the plugin reads
 
-- **Your own chat messages** that start with `!c`, `!ai`, `!chat` or `!gc`. The plugin checks that the sender is your own character. **Other players' messages are ignored and never sent anywhere.**
+- **Your own chat messages** that start with your trigger words (`!c`, `!ai`, `!chat` or `!gc` by default). The plugin checks that the sender is your own character. **Other players' messages are ignored and never sent anywhere.**
 - Your character's display name, only to recognise your own messages. It is not sent anywhere.
 
 ## What it sends, and where
 
 When you ask a question, the plugin sends these to the AI provider you've selected:
 - your question
-- up to the last 10 questions and answers from the current conversation
-- a fixed instruction asking for short, plain-text answers
+- the recent conversation, as many previous questions and answers as your Memory setting allows (none to 20)
+- an instruction asking for short, plain-text answers, plus any custom instructions you've written in settings
 
 It's sent over an encrypted connection (HTTPS), using your API key.
 
@@ -42,6 +42,7 @@ The United States doesn't have full UK adequacy status for this purpose. Each pr
 Stored on your computer, in the RuneScape client's plugin settings, which other plugins can't read:
 - your API keys, one per provider you've set up
 - your chosen provider and models
+- your settings (trigger words, answer length, memory, custom instructions, display options)
 
 The conversation is kept in memory only and is gone when the plugin or game closes. Nothing about the game is stored.
 

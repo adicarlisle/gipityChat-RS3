@@ -174,10 +174,25 @@ local function live(type_)
     end
     return out
 end
-function __setupOpen() return #live("InputField") > 0 end
-function __setupText() local t = {} for _, c in ipairs(live("Text")) do t[#t + 1] = c.content or "" end return table.concat(t, " | ") end
-function __pasteKey(key)
-    local f = live("InputField")[1]
+function __panelOpen() return #live("InputField") > 0 end
+function __panelText()
+    local t = {}
+    for _, c in ipairs(live("Text")) do t[#t + 1] = c.content or "" end
+    for _, c in ipairs(live("InputField")) do t[#t + 1] = (c.content or "") .. " [" .. (c.emptyText or "") .. "]" end
+    return table.concat(t, " | ")
+end
+-- Drives the settings panel through settings.lua's named controls.
+local function controls() return require("settings").controls end
+function __setField(name, value) controls()[name].content = value end
+function __getField(name) return controls()[name].content end
+function __press(name, which)
+    local c = controls()[name]
+    local b = which and c[which] or c
+    return b._hooks[ui.Hook.ONBUTTONPRESSED](b, 1, 0)
+end
+function __chooserText(name) return controls()[name].text.content end
+function __enterKey(key)
+    local f = controls().key
     f.content = key
     f._hooks[ui.Hook.ONCONTENTCHANGED](f, ui.InputFieldActionResult.SUBMIT, key)
 end
