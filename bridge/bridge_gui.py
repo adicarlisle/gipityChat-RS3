@@ -156,6 +156,8 @@ class App:
         self.v_remember = tk.BooleanVar(value=bool(saved.get("remember_secrets", False)))
         self.v_autostart = tk.BooleanVar(value=bool(saved.get("autostart", False)))
         self.v_client_id = tk.StringVar(value=saved.get("twitch_client_id", ""))
+        self.plugin_dest = saved.get("plugin_installed_to", "")
+        self.setup_window: tk.Toplevel | None = None
         self.v_message = tk.StringVar()
 
         root.title(APP_NAME)
@@ -219,6 +221,7 @@ class App:
         self.b_start = ttk.Button(bar, text="Start bridge", command=self.toggle)
         self.b_start.pack(side="left")
         ttk.Button(bar, text="Install plugin into RS3\u2026", command=self.install_plugin).pack(side="left", padx=(6, 0))
+        ttk.Button(bar, text="Plugin setup\u2026", command=self.show_plugin_setup).pack(side="left", padx=(6, 0))
         if sys.platform.startswith("linux"):
             ttk.Button(bar, text="Add to app menu", command=self.add_to_app_menu).pack(side="left", padx=(6, 0))
         status = ttk.Frame(outer, padding=(0, 0, 0, 8))
@@ -263,6 +266,7 @@ class App:
             "remember_secrets": self.v_remember.get(),
             "autostart": self.v_autostart.get(),
             "twitch_client_id": self.v_client_id.get().strip(),
+            "plugin_installed_to": self.plugin_dest,
         }
 
     def save(self) -> None:
@@ -520,10 +524,83 @@ class App:
         except OSError as exc:
             messagebox.showerror(APP_NAME, f"Couldn't copy the plugin:\n{exc}")
             return
-        messagebox.showinfo(APP_NAME, (
-            f"Installed to:\n{dest}\n\nIn the beta client, open the console (Alt + `) and run:\n"
-            f"prf\npon {PLUGIN_NAME}\nppr {PLUGIN_NAME}\nppe {PLUGIN_NAME} httpAccess\n"
-            f"ppe {PLUGIN_NAME} chatAccess\n\nAfter updating, use: prl {PLUGIN_NAME}"))
+        self.plugin_dest = str(dest)
+        self.save()
+        self.show_plugin_setup(just_installed=True)
+
+    # ----- plugin setup window (reopen any time with "Plugin setup...") -----
+
+    SETUP_COMMANDS = (f"prf\npon {PLUGIN_NAME}\nppr {PLUGIN_NAME}\n"
+                      f"ppe {PLUGIN_NAME} httpAccess\nppe {PLUGIN_NAME} chatAccess")
+    RELOAD_COMMAND = f"prl {PLUGIN_NAME}"
+
+    def show_plugin_setup(self, just_installed: bool = False) -> None:
+        # Only one at a time: bring the existing window forward instead.
+        if self.setup_window is not None and self.setup_window.winfo_exists():
+            self.setup_window.destroy()
+        d = tk.Toplevel(self.root)
+        self.setup_window = d
+        d.title("Plugin setup")
+        d.transient(self.root)
+        f = ttk.Frame(d, padding=12)
+        f.pack(fill="both", expand=True)
+
+        heading = "Plugin installed \u2713" if just_installed else "Plugin setup"
+        ttk.Label(f, text=heading, font=("TkDefaultFont", 11, "bold")).pack(anchor="w")
+        where = self.plugin_dest or "Not installed from this app yet. Use \u201cInstall plugin into RS3\u2026\u201d."
+        ttk.Label(f, text="Installed to:", foreground="#777").pack(anchor="w", pady=(6, 0))
+        loc = ttk.Entry(f, width=70)
+        loc.insert(0, where)
+        loc.configure(state="readonly")  # selectable/copyable, not editable
+        loc.pack(fill="x")
+
+        def block(title: str, text: str, hint: str) -> None:
+            ttk.Label(f, text=title, font=("TkDefaultFont", 10, "bold")).pack(anchor="w", pady=(12, 0))
+            ttk.Label(f, text=hint, foreground="#777", wraplength=520, justify="left").pack(anchor="w")
+            row = ttk.Frame(f)
+            row.pack(fill="x", pady=(4, 0))
+            box = tk.Text(row, height=text.count("\n") + 1, width=46, font="TkFixedFont",
+                          relief="solid", borderwidth=1, padx=6, pady=4)
+            box.insert("1.0", text)
+            box.configure(state="disabled")  # still selectable for copying
+            box.pack(side="left", fill="x", expand=True)
+            btn = ttk.Button(row, text="Copy", width=9)
+            btn.configure(command=lambda: self._copy(text, btn))
+            btn.pack(side="left", padx=(6, 0), anchor="n")
+
+        block("First time: turn it on", self.SETUP_COMMANDS,
+              "In the beta client, open the console with Alt + ` and run these one at a time "
+              "(the console takes one command per line).")
+        block("After updating the plugin", self.RELOAD_COMMAND, "Reloads the plugin with the new files.")
+
+        btns = ttk.Frame(f)
+        btns.pack(fill="x", pady=(12, 0))
+        ttk.Button(btns, text="Close", command=d.destroy).pack(side="right")
+        if self.plugin_dest and Path(self.plugin_dest).is_dir():
+            ttk.Button(btns, text="Open folder", command=lambda: open_folder(self.plugin_dest)).pack(side="right", padx=6)
+        ttk.Label(btns, text="Reopen this any time with \u201cPlugin setup\u2026\u201d.",
+                  foreground="#777").pack(side="left")
+
+    def _copy(self, text: str, button: ttk.Button) -> None:
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.root.update()  # keeps the clipboard after this window closes on some systems
+        button.configure(text="Copied \u2713")
+        button.after(1500, lambda: button.winfo_exists() and button.configure(text="Copy"))
+
+
+def open_folder(path: str) -> None:
+    """Opens a folder in the system file manager."""
+    import subprocess
+    try:
+        if sys.platform == "win32":
+            os.startfile(path)  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", path])
+        else:
+            subprocess.Popen(["xdg-open", path])
+    except OSError as exc:
+        messagebox.showerror(APP_NAME, f"Couldn't open the folder:\n{exc}")
 
 
 def launch_command() -> str:

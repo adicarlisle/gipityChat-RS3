@@ -137,6 +137,23 @@ def step5():
     app.v_remember.set(False); app.save()
     saved = json.loads(bridge_gui.config_path().read_text())
     assert "anthropic_key" not in saved and "twitch_token" not in saved and saved["channel"] == "adi"
+    # Plugin install + reusable setup window
+    beta = tempfile.mkdtemp()
+    bridge_gui.candidate_beta_dirs = lambda: [bridge_gui.Path(beta)]
+    bridge_gui.messagebox.askyesno = lambda *a, **k: True
+    app.install_plugin()
+    assert os.path.isfile(os.path.join(beta, "dev_plugins", "twitch-claude-chat", "main.lua"))
+    assert app.plugin_dest.endswith("twitch-claude-chat")
+    assert json.loads(bridge_gui.config_path().read_text())["plugin_installed_to"] == app.plugin_dest
+    win = app.setup_window
+    win.geometry("+100+40"); root.update(); time.sleep(0.3); win.update()
+    from PIL import ImageGrab
+    x, y, w, h = win.winfo_rootx(), win.winfo_rooty(), win.winfo_width(), win.winfo_height()
+    ImageGrab.grab(bbox=(x, y, x + w, y + h)).save(os.path.join(sys.argv[1], "gui-4-plugin-setup.png"))
+    win.destroy()
+    app.show_plugin_setup()  # reopen later
+    assert app.setup_window.winfo_exists(); app.setup_window.destroy()
+
     # Linux app menu shortcut
     os.environ["XDG_DATA_HOME"] = tempfile.mkdtemp()
     desktop = bridge_gui.install_linux_shortcut().read_text()
