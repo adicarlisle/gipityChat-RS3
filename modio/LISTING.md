@@ -1,89 +1,94 @@
-# mod.io listing draft: Twitch & Claude Chat
+# mod.io listing: Twitch & Claude Chat
 
-Fill in everything in [square brackets]. Copy the EULA sentence word for word from
-https://developer.runescape.com/rs/submission/example.html, because it has to match exactly.
-
----
-
-**Name** (max 50): Twitch & Claude Chat
-
-**Summary** (10–250): A movable chat window that shows your Twitch stream chat inside RuneScape and lets you ask Claude, an AI assistant, questions without leaving the game. Needs a small companion program running on your PC.
-
-**Tags:** HttpAccess, chatAccess (plus any category tags such as Utility/Streaming)
+Paste the fields below into mod.io. The one thing left for you is the **EULA** sentence: copy it word for word from https://developer.runescape.com/rs/submission/example.html (EULA section), because it has to match exactly.
 
 ---
 
-## Description
+**Name:** Twitch & Claude Chat
+
+**Summary:** A movable chat window that shows your Twitch stream chat inside RuneScape and lets you ask Claude, an AI assistant, questions without leaving the game. Needs the free RS3 Chat Bridge app running on your PC.
+
+**Tags:** HttpAccess, chatAccess (plus a category such as Utility)
+
+**Listing image:** `listing-image.png` (in this folder). A real in-game screenshot is better if you have one.
+
+---
+
+## Description (paste everything below this line)
 
 ### What it does
-Twitch & Claude Chat adds a small window to your screen that you can move around and collapse. It shows:
+Twitch & Claude Chat adds a small window to your screen. You can move it, resize it and collapse it. It shows:
 - **Your Twitch chat**, live, with each chatter's name colour.
-- **Claude**, an AI assistant made by Anthropic. Type a question in the window's box and press Enter. Claude can also see your recent Twitch chat, so you can ask things like "what is chat asking about?"
+- **Claude**, an AI assistant made by Anthropic. Type a question in the window and press Enter. Claude can also see your recent Twitch chat, so you can ask things like "what is chat asking about?"
 
-You can also reply to your Twitch chat from inside the game with `/t your message` in the window, or `!tw your message` in the normal game chat. `!c your question` in game chat asks Claude.
+You can reply to your Twitch chat from inside the game too:
+- In the plugin window: `/t your message`
+- In the normal game chat: `!tw your message`, or `!c your question` to ask Claude
 
 The plugin does **not** play the game for you or look at other players. It only reads game chat to spot **your own** messages that start with `!tw` or `!c`; everyone else's messages are ignored.
 
 ### What you need (read this first)
-The plugin can't connect to Twitch or Claude by itself, so it talks to a small free companion program, the **bridge**, that runs on your own computer.
+The plugin can't connect to Twitch or Claude by itself, so it talks to a free companion app, **RS3 Chat Bridge**, that runs on your own computer.
 
-1. Download the bridge from [GitHub link] and install Python 3 from python.org.
-2. Get a Claude API key from console.anthropic.com. Claude is a paid service, charged by Anthropic for each message.
-3. Start the bridge: `python3 bridge.py --channel yourtwitchname` (full steps at [GitHub link]).
+1. Download RS3 Chat Bridge for Windows, macOS or Linux: https://github.com/adicarlisle/twitch-claude-chat/releases/latest
+2. Get a Claude API key at https://console.anthropic.com. Claude is a paid service, charged by Anthropic per message.
+3. Open the bridge app, enter your Twitch channel and API key, and click **Start bridge**. To post to Twitch, use **Get token…** in the app.
 4. Install this plugin from the Plugin Hub and allow its permissions.
 
-If the bridge isn't running, the window says **bridge offline** and nothing else happens.
+If the bridge isn't running, the window shows **bridge offline** and nothing else happens.
+
+Full guide: https://github.com/adicarlisle/twitch-claude-chat#readme
 
 ### How to use it
-- Drag the title bar to move the window. Use the mouse wheel to scroll back.
+- **Move:** click **Move**, move the mouse, click again. **Size** works the same way. You can also type `/move x y`, `/size w h` or `/reset`.
 - **All / Twitch / Claude** button: choose which messages to show.
-- **In-game** button: also copy messages into your normal chatbox. Only you can see them; nothing is sent to other players.
-- **Move** / **Size** buttons: click, move the mouse, click again.
-- Commands: `/help`, `/t <message>` (send to Twitch), `/clear` (new Claude conversation), `/cls` (clear the window).
-- In normal game chat: `!tw <message>` and `!c <question>`. Tip: use a Friends Chat with only you in it so other players don't see these.
+- **In-game** button: also copy messages into your normal chatbox. Only you can see them.
+- Commands: `/help`, `/t <message>`, `/clear` (new Claude conversation), `/cls` (clear the window).
+- Tip: game chat goes to the game server, so others in that channel see your `!tw` and `!c` messages. Use a Friends Chat channel with only you in it to keep them private.
+
+### Email
+adi.carlisle@ghostcompany.co.uk
 
 ### Feedback and collaboration
-Feedback and bug reports are welcome in this plugin's channel in the RuneScape Plugin Portal Discord, or by email at [contact email]. For collaboration, get in touch through either.
+Feedback, bug reports and ideas are welcome in this plugin's channel in the RuneScape Plugin Portal Discord, by email at adi.carlisle@ghostcompany.co.uk, or as an issue at https://github.com/adicarlisle/twitch-claude-chat/issues. For collaboration, get in touch through any of these.
 
 ### EULA
-[Paste the exact statement from the example page. It begins: "This Plugin uses software licensed by Jagex to the developer under the terms of the Jagex End User Licence Agreement" and links to https://legal.jagex.com/docs/terms/eula]
+[Paste the exact EULA statement from the example page here. It begins "This Plugin uses software licensed by Jagex to the developer under the terms of the Jagex End User Licence Agreement (EULA)" and links to https://legal.jagex.com/docs/terms/eula]
 
 ### Permissions
 
 #### HttpAccess
-Used to talk to the bridge program on your own computer, at `http://127.0.0.1:8787` only. The plugin sends:
-- the text you type into the plugin's window (to pass on to Claude or to your Twitch chat)
-- requests asking for new messages to show
+Used to talk to the RS3 Chat Bridge app on your own computer, at `http://127.0.0.1:8787` only. The plugin sends the bridge:
+- the text you type into the plugin's window, to pass on to Claude or your Twitch chat
+- your own `!tw` / `!c` game chat messages (see chatAccess)
+- requests for new messages to show
 
-It does not send any game information.
+No game information is sent.
 
 #### chatAccess
 Optional. Used for two things:
-- When you turn on the **In-game** button, copies of the window's messages are added to your own chatbox with `Chat.AddMessage`. Only you can see them, and they aren't sent to the game server.
-- Spotting **your own** chat messages that start with `!tw` (send to Twitch) or `!c` (ask Claude), so you can use the normal chatbox. The plugin checks that the sender is your own character. Other players' messages are ignored and never sent anywhere. Note that game chat goes to the game server before the plugin sees it, so others in that channel see your `!tw`/`!c` messages too.
+- **In-game button:** copies of the window's messages are added to your own chatbox with `Chat.AddMessage`. Only you see them, and they aren't sent to the game server.
+- **Chat commands:** spotting **your own** chat messages that start with `!tw` (send to Twitch) or `!c` (ask Claude). The plugin checks that the sender is your own character. Other players' messages are ignored and never sent anywhere.
 
-#### How the permissions work together
-HttpAccess fetches Twitch and Claude messages from the bridge and sends your questions to it. With chatAccess, your own `!tw`/`!c` chat messages are sent to the bridge the same way, and the window's messages can be copied into your chatbox. Other players' chat is never sent anywhere.
+#### Combine permissions
+With both permissions, your own `!tw` / `!c` messages are passed to the bridge on your computer through HttpAccess, and Twitch and Claude messages can be shown in your chatbox. Other players' chat is never read for any purpose or sent anywhere.
 
-### Data protection
-[Data protection case 3]
-The plugin itself only sends data to your own computer (127.0.0.1). The companion bridge then sends:
-- what you type to Claude (in the window or with `!c`) to **Anthropic** (United States), using your own API key
-- your `/t` and `!tw` messages to **Twitch** (United States)
+### Data Protection (case 3)
+The plugin itself only sends data to your own computer (127.0.0.1). The companion bridge app then sends:
+- what you ask Claude, plus up to the last 25 messages from your Twitch chat as context, to **Anthropic** (United States), using your own API key
+- your `/t` and `!tw` messages, and your Twitch token, to **Twitch** (United States)
 
-It reads your public Twitch chat from Twitch.
+It also reads your channel's public Twitch chat.
 
-- **Privacy notice:** [link to your privacy notice; the ICO has a generator]
-- **Security:** the bridge only accepts connections from your own computer, and all traffic to Anthropic and Twitch is encrypted (HTTPS/TLS).
-- **Who can access data:** the developer never receives any data. Anthropic and Twitch process it under their own terms and privacy policies.
-- **Data rights requests:** [contact email]
+- **Privacy notice:** https://github.com/adicarlisle/twitch-claude-chat/blob/main/PRIVACY.md
+- **Security:** the bridge only accepts connections from your own computer, and traffic to Anthropic and Twitch is encrypted (HTTPS/TLS). Saved keys are stored in a settings file readable only by your user account.
+- **Who can access the data:** the developer never receives any data. Anthropic and Twitch process it under their own terms and privacy policies.
+- **Data rights requests:** adi.carlisle@ghostcompany.co.uk
 
 ---
 
-## Before you press submit
-- [ ] Put your real contact email in `plugin.json` (`contactEmailAddress`) and above. Use one that's different from your mod.io login, then rebuild the zip.
-- [ ] Test it in the beta client and replace the mockup image with a real screenshot.
-- [ ] Publish the bridge publicly (for example on GitHub) so moderators and players can get it.
-- [ ] Fill in the Jagex adequacy exception form after submitting (needed because data goes to the US).
-- [ ] Upload: tick Source plus Windows, Linux, Android and iOS. Set version `0.1.0`, matching `plugin.json`.
-- [ ] Keep the listing **hidden** until you're ready.
+## Submission checklist
+- [ ] Create the listing on mod.io (RuneScape page → **Add plugin**). Keep it **hidden** until ready.
+- [ ] Paste in the name, summary, tags and description above, with the exact EULA sentence filled in.
+- [ ] Upload `twitch-claude-chat-0.1.1.zip` from the GitHub Release. Tick **Source** and all platforms (Windows, Linux, Android, iOS). Set version `0.1.1`.
+- [ ] Submit, then fill in Jagex's adequacy exception form (data goes to the US). It asks for your name, address and data protection contact.

@@ -1,10 +1,16 @@
 {
     "name": "Twitch & Claude Chat",
-    "version": "0.1.0",
-    "contactEmailAddress": "you@example.com",
+    "version": "0.1.1",
+    "contactEmailAddress": "adi.carlisle@ghostcompany.co.uk",
     "requiredDependencies": {},
     "optionalDependencies": {},
-    "requiredPermissions": [ "httpAccess" ],
-    "optionalPermissions": [ "chatAccess" ],
-    "urls": { "bridge": "http://127.0.0.1:8787" }
+    "requiredPermissions": [
+        "httpAccess"
+    ],
+    "optionalPermissions": [
+        "chatAccess"
+    ],
+    "urls": {
+        "bridge": "http://127.0.0.1:8787"
+    }
 }

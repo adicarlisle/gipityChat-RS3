@@ -82,7 +82,7 @@ Unmoderated plugins only run on the **plugin beta** client.
 
 To release, bump `version` in `plugin.json` and push to `main`. Pushes that don't change the version just build and test.
 
-`modio/` has the draft mod.io listing text and image.
+`modio/` has the mod.io listing text and image, and `PRIVACY.md` is the privacy notice the listing links to.
 
 ## Notes and limits
 
