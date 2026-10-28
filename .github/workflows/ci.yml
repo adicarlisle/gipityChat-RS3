@@ -1,0 +1,111 @@
+# CI/CD for RS3 Twitch & Claude Chat
+#
+#  * Every push / pull request: run the tests, then build the bridge app for
+#    Windows, macOS and Linux (download them from the run's "Artifacts").
+#  * Push a tag like v0.2.0: also publish a GitHub Release with the three apps
+#    and the plugin zip ready to upload to mod.io.
+#
+#    git tag v0.2.0 && git push origin v0.2.0
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk xvfb
+          python -m pip install lupa pyflakes pillow
+      - name: Lint
+        run: python -m pyflakes bridge/ build.py
+      - name: Plugin + bridge end-to-end test (mock Twitch & Claude)
+        run: python test/harness.py
+      - name: Desktop app smoke test
+        run: |
+          mkdir -p shots
+          xvfb-run -a -s "-screen 0 1024x768x24" python test/gui_smoke.py shots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gui-screenshots
+          path: shots/
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset: RS3ChatBridge-Windows.zip
+          - os: macos-latest
+            asset: RS3ChatBridge-macOS.zip
+          - os: ubuntu-latest
+            asset: RS3ChatBridge-Linux.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Tk (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+      - run: python -m pip install pyinstaller
+      - run: python build.py
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path dist/RS3ChatBridge.exe -DestinationPath ${{ matrix.asset }}
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent dist/RS3ChatBridge.app ${{ matrix.asset }}
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: tar -czf ${{ matrix.asset }} -C dist RS3ChatBridge  # tar keeps the executable bit
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check plugin.json version matches the tag
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have=$(python -c "import json;print(json.load(open('plugin/twitch-claude-chat/plugin.json'))['version'])")
+          if [ "$want" != "$have" ]; then
+            echo "::error::Tag is $GITHUB_REF_NAME but plugin.json version is $have. Update plugin.json first."
+            exit 1
+          fi
+      - name: Plugin zip for mod.io (main.lua + plugin.json at the top level)
+        run: zip -j "twitch-claude-chat-${GITHUB_REF_NAME#v}.zip" plugin/twitch-claude-chat/main.lua plugin/twitch-claude-chat/plugin.json
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            assets/*
+            twitch-claude-chat-*.zip

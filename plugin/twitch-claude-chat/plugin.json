@@ -1,0 +1,10 @@
+{
+    "name": "Twitch & Claude Chat",
+    "version": "0.1.0",
+    "contactEmailAddress": "you@example.com",
+    "requiredDependencies": {},
+    "optionalDependencies": {},
+    "requiredPermissions": [ "httpAccess" ],
+    "optionalPermissions": [ "chatAccess" ],
+    "urls": { "bridge": "http://127.0.0.1:8787" }
+}
