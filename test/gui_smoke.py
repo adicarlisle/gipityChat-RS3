@@ -137,6 +137,10 @@ def step5():
     app.v_remember.set(False); app.save()
     saved = json.loads(bridge_gui.config_path().read_text())
     assert "anthropic_key" not in saved and "twitch_token" not in saved and saved["channel"] == "adi"
+    # Linux app menu shortcut
+    os.environ["XDG_DATA_HOME"] = tempfile.mkdtemp()
+    desktop = bridge_gui.install_linux_shortcut().read_text()
+    assert "Exec=" in desktop and "bridge_gui.py" in desktop and "Terminal=false" in desktop, desktop
     print("GUI SMOKE TEST PASSED")
     root.destroy()
 

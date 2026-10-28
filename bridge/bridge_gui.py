@@ -219,6 +219,8 @@ class App:
         self.b_start = ttk.Button(bar, text="Start bridge", command=self.toggle)
         self.b_start.pack(side="left")
         ttk.Button(bar, text="Install plugin into RS3\u2026", command=self.install_plugin).pack(side="left", padx=(6, 0))
+        if sys.platform.startswith("linux"):
+            ttk.Button(bar, text="Add to app menu", command=self.add_to_app_menu).pack(side="left", padx=(6, 0))
         status = ttk.Frame(outer, padding=(0, 0, 0, 8))
         status.pack(fill="x")
         self.s_bridge = StatusDot(status, "Bridge")
@@ -477,6 +479,17 @@ class App:
         ttk.Button(btns, text="Cancel", command=d.destroy).pack(side="right", padx=6)
         d.grab_set()
 
+    # ----- Linux app menu shortcut -----
+
+    def add_to_app_menu(self) -> None:
+        try:
+            path = install_linux_shortcut()
+        except OSError as exc:
+            messagebox.showerror(APP_NAME, f"Couldn't add the shortcut:\n{exc}")
+            return
+        messagebox.showinfo(APP_NAME, f"Added '{APP_NAME}' to your app menu.\n\n({path})\n\n"
+                                      "If you move this app's file, click this button again.")
+
     # ----- plugin install helper -----
 
     def install_plugin(self) -> None:
@@ -511,6 +524,33 @@ class App:
             f"Installed to:\n{dest}\n\nIn the beta client, open the console (Alt + `) and run:\n"
             f"prf\npon {PLUGIN_NAME}\nppr {PLUGIN_NAME}\nppe {PLUGIN_NAME} httpAccess\n"
             f"ppe {PLUGIN_NAME} chatAccess\n\nAfter updating, use: prl {PLUGIN_NAME}"))
+
+
+def launch_command() -> str:
+    """How to start this app again, for a desktop shortcut."""
+    if getattr(sys, "frozen", False):
+        return f'"{Path(sys.executable).resolve()}"'
+    return f'"{Path(sys.executable).resolve()}" "{Path(__file__).resolve()}"'
+
+
+def install_linux_shortcut() -> Path:
+    """Adds 'RS3 Chat Bridge' to the Linux app menu (freedesktop .desktop file)."""
+    apps = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "applications"
+    apps.mkdir(parents=True, exist_ok=True)
+    path = apps / "rs3-chat-bridge.desktop"
+    path.write_text(
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        f"Name={APP_NAME}\n"
+        "Comment=Twitch chat and Claude for the RuneScape 3 plugin\n"
+        f"Exec={launch_command()}\n"
+        "Icon=utilities-terminal\n"
+        "Terminal=false\n"
+        "Categories=Game;Utility;\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+    return path
 
 
 def main() -> None:

@@ -2,16 +2,15 @@
 #
 #  * Every push / pull request: run the tests, then build the bridge app for
 #    Windows, macOS and Linux (download them from the run's "Artifacts").
-#  * Push a tag like v0.2.0: also publish a GitHub Release with the three apps
-#    and the plugin zip ready to upload to mod.io.
-#
-#    git tag v0.2.0 && git push origin v0.2.0
+#  * Release: when plugin/twitch-claude-chat/plugin.json's "version" on main
+#    has no GitHub Release yet, the pipeline tags it (v<version>) and publishes
+#    a Release with the three apps and the plugin zip for mod.io.
+#    So to release: bump "version", commit, push to main.
 name: CI
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -82,30 +81,50 @@ jobs:
           path: ${{ matrix.asset }}
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Check plugin.json version matches the tag
+      - name: Is this version already released?
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          want="${GITHUB_REF_NAME#v}"
-          have=$(python -c "import json;print(json.load(open('plugin/twitch-claude-chat/plugin.json'))['version'])")
-          if [ "$want" != "$have" ]; then
-            echo "::error::Tag is $GITHUB_REF_NAME but plugin.json version is $have. Update plugin.json first."
-            exit 1
+          v=$(python -c "import json;print(json.load(open('plugin/twitch-claude-chat/plugin.json'))['version'])")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "v$v" >/dev/null 2>&1; then
+            echo "v$v is already released; bump the version in plugin.json to make a new release."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Plugin zip for mod.io (main.lua + plugin.json at the top level)
-        run: zip -j "twitch-claude-chat-${GITHUB_REF_NAME#v}.zip" plugin/twitch-claude-chat/main.lua plugin/twitch-claude-chat/plugin.json
+        if: steps.ver.outputs.new == 'true'
+        run: zip -j "twitch-claude-chat-${{ steps.ver.outputs.version }}.zip" plugin/twitch-claude-chat/main.lua plugin/twitch-claude-chat/plugin.json
       - uses: actions/download-artifact@v4
+        if: steps.ver.outputs.new == 'true'
         with:
+          pattern: RS3ChatBridge-*
           path: assets
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
+        if: steps.ver.outputs.new == 'true'
         with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: v${{ steps.ver.outputs.version }}
           generate_release_notes: true
+          body: |
+            ## Downloads
+            - **Windows:** `RS3ChatBridge-Windows.zip` → unzip, run `RS3ChatBridge.exe` (SmartScreen: More info → Run anyway)
+            - **macOS:** `RS3ChatBridge-macOS.zip` → unzip, right-click `RS3ChatBridge.app` → Open (first time only)
+            - **Linux:** `RS3ChatBridge-Linux.tar.gz` → extract, run `RS3ChatBridge`, then click **Add to app menu**
+            - **Plugin for mod.io / dev_plugins:** `twitch-claude-chat-${{ steps.ver.outputs.version }}.zip`
+
+            Setup guide: see the README.
           files: |
             assets/*
             twitch-claude-chat-*.zip

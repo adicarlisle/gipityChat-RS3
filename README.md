@@ -17,7 +17,7 @@ A movable chat window inside the RS3 client that shows your Twitch chat live and
 **Easiest: the desktop app.** Download `RS3ChatBridge` for your system from this repo's **Releases** page, then open it:
 - **Windows:** unzip and run `RS3ChatBridge.exe`. SmartScreen may warn because the app isn't code-signed; click **More info → Run anyway**.
 - **macOS:** unzip and open `RS3ChatBridge.app`. Because it isn't signed, the first time you need to right-click it and choose **Open**.
-- **Linux:** `tar -xzf RS3ChatBridge-Linux.tar.gz && ./RS3ChatBridge`
+- **Linux:** extract `RS3ChatBridge-Linux.tar.gz`, then run `RS3ChatBridge` (in the Files app: right-click → **Run as a Program**). Click **Add to app menu** once, and from then on you can open it from your app grid like any other app.
 
 In the window:
 1. Fill in your Twitch channel and your Anthropic API key. **Get key…** opens the Anthropic console.
@@ -78,13 +78,9 @@ Unmoderated plugins only run on the **plugin beta** client.
 `.github/workflows/ci.yml` runs on every push and pull request:
 1. **test**: lints, runs the plugin and bridge end-to-end test against mock Twitch and Claude servers, and smoke-tests the desktop app on a virtual screen (screenshots are uploaded as an artifact).
 2. **build**: builds the desktop app for Windows, macOS and Linux with PyInstaller (`build.py`).
-3. **release** (tags only): publishes a GitHub Release with the three apps plus the mod.io plugin zip.
+3. **release** (pushes to `main`): if the `version` in `plugin/twitch-claude-chat/plugin.json` has no GitHub Release yet, it tags `v<version>` and publishes a Release with the three apps plus the mod.io plugin zip.
 
-To release, bump `version` in `plugin/twitch-claude-chat/plugin.json`, commit, then:
-```bash
-git tag v0.2.0 && git push origin v0.2.0
-```
-The release job refuses to run if the tag and `plugin.json` versions don't match.
+To release, bump `version` in `plugin.json` and push to `main`. Pushes that don't change the version just build and test.
 
 `modio/` has the draft mod.io listing text and image.
 
