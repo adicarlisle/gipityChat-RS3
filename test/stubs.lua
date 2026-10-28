@@ -57,6 +57,11 @@ Comp.__newindex = function(self, k, v)
     if not (FIELDS.common[k] or FIELDS[rawget(self, "_type")][k]) then
         error("unknown field " .. rawget(self, "_type") .. "." .. tostring(k), 2)
     end
+    -- In the game, label/text strings are markup: a "<" that doesn't start a known tag vanishes.
+    if (k == "label" or k == "content" or k == "emptyText") and type(v) == "string" and rawget(self, "_type") ~= "InputField" then
+        local stray = string.gsub(v, "<lt>", ""):gsub("<gt>", ""):gsub("<col=%x%x%x%x%x%x>", ""):gsub("</col>", ""):gsub("<br>", "")
+        assert(not string.find(stray, "[<>]"), "unescaped < or > in " .. rawget(self, "_type") .. "." .. k .. ": " .. v)
+    end
     rawget(self, "_f")[k] = v
 end
 function Comp.SetPos(self, x, y) rawget(self, "_f").x = x; rawget(self, "_f").y = y end

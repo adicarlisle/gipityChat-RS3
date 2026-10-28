@@ -3,7 +3,7 @@
 -- Asking still happens in game chat; this panel is only for configuration:
 -- provider, model and API key, trigger words, answer style and display.
 --
--- Choices use "<  value  >" buttons rather than dropdowns, which keeps the panel
+-- Choices use "<  value  >" buttons (labelled with the escaped <lt>/<gt>) rather than dropdowns, which keeps the panel
 -- simple and reliable inside a plugin window.
 --
 -- The API key box shows the key while you paste it: the client blanks masked
@@ -125,8 +125,10 @@ function settings.open(opts)
         for i, item in ipairs(list) do
             if item.id == v[key] then idx = i end
         end
-        local prev = newButton("<", CTRL_X, 26)
-        local nxt = newButton(">", CTRL_X + CTRL_W - 26, 26)
+        -- Labels go through the game's text markup, where a bare "<" starts a tag and
+        -- vanishes; "<lt>" and "<gt>" are the escaped forms that draw as < and >.
+        local prev = newButton("<lt>", CTRL_X, 26)
+        local nxt = newButton("<gt>", CTRL_X + CTRL_W - 26, 26)
         local shown = newText("")
         shown:SetPos(CTRL_X + 30, y)
         shown:SetSize(CTRL_W - 60, ROW_H)
