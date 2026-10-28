@@ -1,72 +1,59 @@
-# Privacy notice: Twitch & Claude Chat
+# Privacy notice: gipityChat
 
-_Last updated: 28 October 2026 (added Firebot)_
+_Last updated: 28 October 2026_
 
-This notice explains what information the **Twitch & Claude Chat** RuneScape plugin, its companion **RS3 Chat Bridge** app and its **Firebot script** handle, where that information goes, and your rights.
+This notice explains what information the **gipityChat** RuneScape plugin handles, where it goes, and your rights.
 
 ## Who is responsible
 
-Twitch & Claude Chat is made by **Adi Carlisle**. For questions about this notice or your data, email **adi.carlisle@ghostcompany.co.uk**.
+gipityChat is made by **Adi Carlisle**. For questions about this notice or your data, email **adi.carlisle@ghostcompany.co.uk**.
 
-The developer runs no servers for this plugin and **never receives your data**. Everything below happens on your own computer, or between your computer and the services you choose to connect (Anthropic and Twitch), using your own accounts and keys.
+The developer runs no servers for this plugin and **never receives your data**. The plugin sends data only to the AI provider you choose, using your own account and API key.
 
-## What the plugin does with data
+## What the plugin reads
 
-The plugin runs inside the RuneScape client. It sends data **only to programs on your own computer**: Firebot with our script (`http://127.0.0.1:7472`), or the bridge app (`http://127.0.0.1:8787`). It does not send anything over the internet itself.
+- **Your own chat messages** that start with `!c`, `!ai`, `!chat` or `!gc`. The plugin checks that the sender is your own character. **Other players' messages are ignored and never sent anywhere.**
+- Your character's display name, only to recognise your own messages. It is not sent anywhere.
 
-It sends them:
-- **What you type into the plugin's window**, so it can be passed to Claude or to your Twitch chat.
-- **Your own game chat messages that start with `!tw` or `!c`**. It checks that the sender is your own character; other players' messages are ignored and never sent anywhere.
-- **Requests for new messages** to display. These contain no personal data.
+## What it sends, and where
 
-The plugin stores **window position, size and display options** using the RuneScape client's plugin settings storage, on your computer. It doesn't store chat messages or any game information between sessions.
+When you ask a question, the plugin sends these to the AI provider you've selected:
+- your question
+- up to the last 10 questions and answers from the current conversation
+- a fixed instruction asking for short, plain-text answers
 
-## What the bridge app does with data
+It's sent over an encrypted connection (HTTPS), using your API key.
 
-The bridge runs on your computer and only accepts connections from your computer.
-
-| Data | Sent to | Why |
+| Provider | Where | Privacy policy |
 |---|---|---|
-| Questions you ask Claude, plus up to the last 25 messages from your Twitch chat as context | **Anthropic** (Claude API), United States | To get Claude's reply |
-| Messages you send with `/t` or `!tw` | **Twitch**, United States | To post them in your Twitch chat |
-| Your Twitch token | **Twitch**, United States | To check it and log in to your chat |
-| Your Twitch channel name | **Twitch**, United States | To read your channel's public chat |
+| Claude (Anthropic) | United States | https://www.anthropic.com/legal/privacy |
+| OpenAI | United States | https://openai.com/policies/privacy-policy |
+| Gemini (Google) | United States | https://policies.google.com/privacy |
+| OpenRouter | United States (forwards to the model's provider) | https://openrouter.ai/privacy |
+| Mistral | France (EU) | https://mistral.ai/terms#privacy-policy |
+| xAI | United States | https://x.ai/legal/privacy-policy |
+| Groq | United States | https://groq.com/privacy-policy |
+| Ollama / LM Studio | **Your own computer**: nothing leaves your PC | none |
 
-The bridge **reads your channel's public Twitch chat** so it can show it in the game. This includes chatters' display names and messages, which are already public on Twitch.
+The United States doesn't have full UK adequacy status for this purpose. Each provider processes your data under its own terms and privacy policy, through your own account. The developer has no access to it.
 
-The bridge keeps messages **in memory only** while it's running (up to the most recent 1,000). They're gone when you close it.
+## What it stores
 
-If you tick **Remember token and key**, your Anthropic API key and Twitch token are saved in a settings file in your user folder. They aren't encrypted, but the file is readable only by your user account. Untick the box to stop saving them; the saved copies are then removed from the file.
+Stored on your computer, in the RuneScape client's plugin settings, which other plugins can't read:
+- your API keys, one per provider you've set up
+- your chosen provider and models
 
-## What the Firebot script does with data
+The conversation is kept in memory only and is gone when the plugin or game closes. Nothing about the game is stored.
 
-If you use Firebot instead of the bridge app, the Firebot script does the same job as the bridge, as described above:
-- It reads your channel's chat through Firebot's existing Twitch connection.
-- It sends your questions to Anthropic and your `/t` / `!tw` messages to Twitch through Firebot.
-- It keeps messages in memory only while Firebot is running.
-
-Your Anthropic API key is stored in Firebot's settings on your computer. The script only answers requests from the RuneScape client on your own computer.
-
-## Anthropic and Twitch
-
-Anthropic and Twitch process the data you send them under their own terms and privacy policies, using your own accounts:
-- Anthropic: https://www.anthropic.com/legal/privacy
-- Twitch: https://www.twitch.tv/p/legal/privacy-notice/
-
-Both are in the **United States**, which doesn't have full UK adequacy status for this purpose. Data is sent to them over encrypted connections (HTTPS/TLS). The developer has no access to it.
-
-## Why it's processed
-
-Data is processed only to provide the features you turn on and use: showing your Twitch chat in game, asking Claude questions, and posting to your Twitch chat. The plugin and bridge contain no analytics, tracking or advertising.
+API keys are stored as plain text in the client's settings on your computer. Use `!c /forget` to delete the current provider's key, and delete keys at the provider if you no longer use them.
 
 ## Your choices and rights
 
-- **Don't connect a service you don't want to use.** Without an Anthropic key, nothing is sent to Anthropic. Without a Twitch channel and token, nothing is sent to Twitch.
-- **Stop at any time.** Close the bridge app, or disable the plugin in the RuneScape client.
-- **Delete local data.** Remove the bridge's settings file (its location is shown in the app) and the plugin's settings.
-- **Data held by Anthropic or Twitch:** use their privacy tools or contact them directly.
+- **Don't use a provider you don't want.** Nothing is sent until you set one up and ask a question. Ollama and LM Studio keep everything on your PC.
+- **Stop at any time** by disabling the plugin. Delete saved keys with `!c /forget`.
+- **Data held by an AI provider:** use that provider's privacy tools or contact it directly.
 
-Under UK data protection law you have rights over your personal data, including access, correction and deletion. Because the developer doesn't hold any of your data, most requests are best made to Anthropic or Twitch. You're still welcome to contact the developer with any question or request at **adi.carlisle@ghostcompany.co.uk**.
+Under UK data protection law you have rights over your personal data, including access, correction and deletion. Because the developer doesn't hold any of your data, most requests are best made to your AI provider. You're still welcome to contact the developer at **adi.carlisle@ghostcompany.co.uk**.
 
 If you're unhappy with how your data is handled, you can complain to the UK Information Commissioner's Office: https://ico.org.uk/make-a-complaint/
 

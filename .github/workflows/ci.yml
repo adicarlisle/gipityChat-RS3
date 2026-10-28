@@ -1,11 +1,9 @@
-# CI/CD for RS3 Twitch & Claude Chat
+# CI/CD for gipityChat
 #
-#  * Every push / pull request: run the tests, then build the bridge app for
-#    Windows, macOS and Linux (download them from the run's "Artifacts").
-#  * Release: when plugin/twitch-claude-chat/plugin.json's "version" on main
-#    has no GitHub Release yet, the pipeline tags it (v<version>) and publishes
-#    a Release with the three apps and the plugin zip for mod.io.
-#    So to release: bump "version", commit, push to main.
+#  * Every push / pull request: run the plugin tests.
+#  * Release: when plugin/gipity-chat/plugin.json's "version" on main has no
+#    GitHub Release yet, tag it (v<version>) and publish the plugin zip, ready for
+#    mod.io and dev_plugins. So to release: bump "version", commit, push to main.
 name: CI
 
 on:
@@ -25,72 +23,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
       - name: Install test tools
+        run: python -m pip install lupa
+      - name: Check manifest
         run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-tk xvfb
-          python -m pip install lupa pyflakes pillow
-          npm ci --prefix test/firebot-mock || npm install --prefix test/firebot-mock
-      - name: Lint
-        run: |
-          python -m pyflakes bridge/ build.py
-          node --check firebot/rs3-twitch-claude-chat.js
-      - name: Plugin + bridge end-to-end test (mock Twitch & Claude)
-        run: python test/harness.py
-      - name: Plugin + Firebot script end-to-end test (mock Firebot & Claude)
-        run: python test/firebot_test.py
-      - name: Desktop app smoke test
-        run: |
-          mkdir -p shots
-          xvfb-run -a -s "-screen 0 1024x768x24" python test/gui_smoke.py shots
-      - uses: actions/upload-artifact@v4
-        with:
-          name: gui-screenshots
-          path: shots/
-
-  build:
-    needs: test
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            asset: RS3ChatBridge-Windows.zip
-          - os: macos-latest
-            asset: RS3ChatBridge-macOS.zip
-          - os: ubuntu-latest
-            asset: RS3ChatBridge-Linux.tar.gz
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install Tk (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y python3-tk
-      - run: python -m pip install pyinstaller
-      - run: python build.py
-      - name: Package (Windows)
-        if: runner.os == 'Windows'
-        run: Compress-Archive -Path dist/RS3ChatBridge.exe -DestinationPath ${{ matrix.asset }}
-      - name: Package (macOS)
-        if: runner.os == 'macOS'
-        run: ditto -c -k --keepParent dist/RS3ChatBridge.app ${{ matrix.asset }}
-      - name: Package (Linux)
-        if: runner.os == 'Linux'
-        run: tar -czf ${{ matrix.asset }} -C dist RS3ChatBridge  # tar keeps the executable bit
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.asset }}
-          path: ${{ matrix.asset }}
+          python - <<'EOF'
+          import json
+          m = json.load(open("plugin/gipity-chat/plugin.json"))
+          for field in ("name", "version", "contactEmailAddress", "requiredPermissions", "urls"):
+              assert field in m, f"plugin.json is missing {field}"
+          assert all(c.isdigit() or c == "." for c in m["version"]), "mod.io versions are numbers and dots only"
+          assert "example.com" not in m["contactEmailAddress"], "set a real contact email"
+          for name, url in m["urls"].items():
+              assert url.startswith(("http://", "https://")), f"{name}: URLs must be HTTP or HTTPS"
+          print("plugin.json OK")
+          EOF
+      - name: Plugin end-to-end test (stubbed RS3 API, mock AI provider)
+        run: python test/plugin_test.py
 
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: build
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -101,7 +54,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          v=$(python -c "import json;print(json.load(open('plugin/twitch-claude-chat/plugin.json'))['version'])")
+          v=$(python -c "import json;print(json.load(open('plugin/gipity-chat/plugin.json'))['version'])")
           echo "version=$v" >> "$GITHUB_OUTPUT"
           if gh release view "v$v" >/dev/null 2>&1; then
             echo "v$v is already released; bump the version in plugin.json to make a new release."
@@ -109,32 +62,27 @@ jobs:
           else
             echo "new=true" >> "$GITHUB_OUTPUT"
           fi
-      - name: Plugin zip for mod.io (main.lua + plugin.json at the top level)
+      - name: Plugin zip (files at the top level, as mod.io requires)
         if: steps.ver.outputs.new == 'true'
-        run: zip -j "twitch-claude-chat-${{ steps.ver.outputs.version }}.zip" plugin/twitch-claude-chat/main.lua plugin/twitch-claude-chat/plugin.json
-      - uses: actions/download-artifact@v4
-        if: steps.ver.outputs.new == 'true'
-        with:
-          pattern: RS3ChatBridge-*
-          path: assets
-          merge-multiple: true
+        run: cd plugin/gipity-chat && zip -j "../../gipity-chat-${{ steps.ver.outputs.version }}.zip" *.lua plugin.json
       - uses: softprops/action-gh-release@v2
         if: steps.ver.outputs.new == 'true'
         with:
           tag_name: v${{ steps.ver.outputs.version }}
           target_commitish: ${{ github.sha }}
-          name: v${{ steps.ver.outputs.version }}
+          name: gipityChat v${{ steps.ver.outputs.version }}
           generate_release_notes: true
           body: |
-            ## Downloads
-            - **Windows:** `RS3ChatBridge-Windows.zip` → unzip, run `RS3ChatBridge.exe` (SmartScreen: More info → Run anyway)
-            - **macOS:** `RS3ChatBridge-macOS.zip` → unzip, right-click `RS3ChatBridge.app` → Open (first time only)
-            - **Linux:** `RS3ChatBridge-Linux.tar.gz` → extract, run `RS3ChatBridge`, then click **Add to app menu**
-            - **Firebot users:** `rs3-twitch-claude-chat.js` → add as a Firebot startup script instead of running the bridge app (see firebot/README.md)
-            - **Plugin for mod.io / dev_plugins:** `twitch-claude-chat-${{ steps.ver.outputs.version }}.zip`
+            ## Install
+            Unzip `gipity-chat-${{ steps.ver.outputs.version }}.zip` into `dev_plugins/gipity-chat` in your RS3 beta client folder, then in the console (Alt + `):
+            ```
+            prf
+            pon gipity-chat
+            ppr gipity-chat
+            ppe gipity-chat chatAccess
+            ppe gipity-chat httpAccess
+            ```
+            Paste your API key in the box that appears, then ask in chat: `!c hello`. See the README for details.
 
-            Setup guide: see the README.
-          files: |
-            assets/*
-            twitch-claude-chat-*.zip
-            firebot/rs3-twitch-claude-chat.js
+            The same zip is the one to upload to mod.io.
+          files: gipity-chat-*.zip

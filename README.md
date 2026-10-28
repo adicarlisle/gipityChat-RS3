@@ -1,103 +1,99 @@
-# Twitch & Claude Chat for RuneScape 3
+# gipityChat for RuneScape 3
 
-A movable chat window inside the RS3 client that shows your Twitch chat live and lets you talk to Claude from the same box. You can also reply to Twitch with `/t`, and copy lines into the normal game chatbox, where only you can see them.
+Ask an AI questions from the normal RS3 chatbox while you play.
 
 ```
- Twitch IRC ──►┐
-               ├──► bridge.py (127.0.0.1:8787) ◄── polls / POSTs ── RS3 plugin (Lua)
- Claude API ◄─►┘
+You:     !c what do I need for the Kalphite Queen?
+Claude:  Bring a Dramen staff, prayer potions and food, and stay at range...
 ```
 
-**How it connects.** The official Client Plugin API only lets plugins make plain HTTP `GET`/`POST` requests to URLs declared in `plugin.json`. Plugins get no WebSockets, so they can't hold a live Twitch chat connection themselves. So the plugin talks to a program on your PC that already holds one, and finds it automatically:
+- Type `!c your question` in chat (`!ai`, `!chat` and `!gc` work too). The answer appears in your chatbox, **visible only to you**.
+- **Claude** is the default. You can switch to OpenAI, Gemini, OpenRouter (hundreds of models), Mistral, xAI or Groq, or run models **on your own PC** with Ollama or LM Studio.
+- It's just the plugin: no extra app and no window. The only UI is a small box for pasting your API key.
+- It only reads **your own** chat messages. Other players' messages are ignored and never sent anywhere.
 
-1. **Firebot** (recommended if you stream with it): add the startup script in `firebot/`. See [firebot/README.md](firebot/README.md).
-2. **RS3 Chat Bridge**: a small desktop app in this repo, for anyone not using Firebot.
+Built on Jagex's official [RuneScape Client Plugin API](https://developer.runescape.com/rs/).
 
-The plugin tries Firebot first (`127.0.0.1:7472`), then the bridge (`127.0.0.1:8787`), and shows which one it's using.
+## Install (plugin beta)
 
-## Setup
+Unmoderated plugins only run on the **plugin beta** client. With Steam, add this launch option:
+`%command% --configURI rs-launch://world204.runescape.com/jav_config_beta.ws`
 
-Using Firebot? Follow [firebot/README.md](firebot/README.md) instead of step 1, then do step 2.
-
-### 1. Run the bridge
-
-**Easiest: the desktop app.** Download `RS3ChatBridge` for your system from this repo's **Releases** page, then open it:
-- **Windows:** unzip and run `RS3ChatBridge.exe`. SmartScreen may warn because the app isn't code-signed; click **More info → Run anyway**.
-- **macOS:** unzip and open `RS3ChatBridge.app`. Because it isn't signed, the first time you need to right-click it and choose **Open**.
-- **Linux:** extract `RS3ChatBridge-Linux.tar.gz`, then run `RS3ChatBridge` (in the Files app: right-click → **Run as a Program**). Click **Add to app menu** once, and from then on you can open it from your app grid like any other app.
-
-In the window:
-1. Fill in your Twitch channel and your Anthropic API key. **Get key…** opens the Anthropic console.
-2. Optionally add a Twitch token so `/t` and `!tw` can post to chat. **Get token…** walks you through it.
-3. Click **Start bridge**. The dots show the Bridge, Twitch, Claude and the in-game Plugin as each connects.
-4. **Install plugin into RS3…** copies the plugin into your beta client's `dev_plugins` folder.
-
-Tick **Remember token and key** to save them in your user settings folder; they're stored unencrypted, readable only by your user. The box at the bottom lets you test Claude or Twitch without opening the game.
-
-**From source:** with Python 3.9+, run `python bridge/bridge_gui.py`, or use one of the launchers: `Start Bridge (Windows).bat`, `Start Bridge (Mac).command`, or `start-bridge.sh` on Linux. On Ubuntu you need `sudo apt install python3-tk` first. On macOS use Python from python.org, because Apple's built-in Python has a broken Tk.
-
-**Command line, no window:**
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-export TWITCH_OAUTH=xxxxxxxx          # optional, for sending to Twitch
-python3 bridge/bridge.py --channel yourtwitchname
-```
-
-| Option | Default | |
-|---|---|---|
-| `--channel` | – | Twitch channel to read. Leave it out to use Claude only. |
-| `--model` | `claude-haiku-5-5` | `claude-sonnet-5-5` gives better answers but is a bit slower. |
-| `--port` | `8787` | Must match `urls.bridge` in `plugin.json`. |
-| `--charset` | `ascii` | Folds accents and drops emoji the game fonts can't draw. Use `utf8` to pass text through unchanged. |
-
-### 2. Install the plugin (plugin beta)
-
-Unmoderated plugins only run on the **plugin beta** client.
-
-1. Copy the `plugin/twitch-claude-chat` folder into `dev_plugins` under the beta data folder. Create `dev_plugins` if it doesn't exist. It has to be a real folder copy; symlinks aren't loaded.
-   - Windows: `C:\ProgramData\Jagex\RuneScape-BETA\dev_plugins\twitch-claude-chat`
-   - macOS: `~/Jagex/RuneScape-BETA/dev_plugins/twitch-claude-chat`
+1. Download `gipity-chat-<version>.zip` from [Releases](https://github.com/adicarlisle/twitch-claude-chat/releases/latest) and unzip it into a folder called `gipity-chat` inside the beta client's `dev_plugins` folder. Create `dev_plugins` if needed. Typical locations:
+   - Windows: `C:\ProgramData\Jagex\RuneScape-BETA\dev_plugins\gipity-chat`
+   - Steam on Linux: `~/.local/share/Steam/steamapps/common/RuneScape/RuneScape-BETA/dev_plugins/gipity-chat`
 2. In game, open the console with **Alt + `** and run:
    ```
    prf
-   pon twitch-claude-chat
-   ppr twitch-claude-chat
-   ppe twitch-claude-chat httpAccess
-   ppe twitch-claude-chat chatAccess
+   pon gipity-chat
+   ppr gipity-chat
+   ppe gipity-chat chatAccess
+   ppe gipity-chat httpAccess
    ```
-   `chatAccess` is optional. It's only needed for the **Game chat** button.
-3. After editing `main.lua`, run `prl twitch-claude-chat` to reload.
+3. A box asks for your API key. Get one from [console.anthropic.com](https://console.anthropic.com/settings/keys), paste it in and press **Save**.
+4. In chat: `!c hello`
 
-## Using it
+## Commands
 
-- Type in the box and press **Enter** to ask Claude. Claude also sees the last ~25 Twitch messages, so "what's chat asking about?" works.
-- `/t <message>` (or `!tw <message>`) in the window's box sends a message to your Twitch chat.
-- **From the real game chat:** type `!tw <message>` to send to Twitch or `!c <question>` to ask Claude. This needs `chatAccess`. Others in that chat channel will see the message, so use a Friends Chat channel with only you in it to keep it private. Only your own messages are acted on.
-- `/clear` starts a new Claude conversation. `/cls` clears the window. `/mode` (or the **All** button) cycles through All, Twitch and Claude. `/help` lists the commands.
-- **Move:** click **Move** in the title bar, move the mouse, then click it again (it says **Done**) to drop the window.
-- **Resize:** same with the **Size** button next to the input box. Lines re-wrap to the new width.
-- If either button misbehaves, type `/move x y`, `/size w h` or `/reset`. Position and size are saved.
-- Use the mouse wheel to scroll back. **-** collapses the window to its title bar and **+** opens it again; reloading the plugin always opens it.
-- **In-game** copies new Twitch and Claude lines into the real chatbox using `Chat.AddMessage`. Only you can see them; they aren't sent to the server.
+Type these in game chat:
 
-## CI/CD
+| Command | What it does |
+|---|---|
+| `!c QUESTION` | Ask the current AI. Follow-up questions remember the last few exchanges. |
+| `!c /setup` | Open the key box to add or change your API key |
+| `!c /provider` | List providers |
+| `!c /provider NAME` | Switch: `claude`, `openai`, `gemini`, `openrouter`, `mistral`, `xai`, `groq`, `ollama`, `lmstudio` |
+| `!c /model` | Show the current model |
+| `!c /model NAME` | Change the model, e.g. `claude-sonnet-5-5` |
+| `!c /new` | Start a new conversation |
+| `!c /forget` | Delete the saved key for the current provider |
+| `!c /help` | Show help in chat |
 
-`.github/workflows/ci.yml` runs on every push and pull request:
-1. **test**: lints, then runs:
-   - the plugin and bridge end-to-end test against mock Twitch and Claude servers
-   - the plugin and Firebot-script test against a stand-in for Firebot's web server (`test/firebot-mock`)
-   - a smoke test of the desktop app on a virtual screen (screenshots are uploaded as an artifact)
-2. **build**: builds the desktop app for Windows, macOS and Linux with PyInstaller (`build.py`).
-3. **release** (pushes to `main`): if the `version` in `plugin/twitch-claude-chat/plugin.json` has no GitHub Release yet, it tags `v<version>` and publishes a Release with the three apps, the Firebot script and the mod.io plugin zip.
+Keys and models are saved separately for each provider.
 
-To release, bump `version` in `plugin.json` and push to `main`. Pushes that don't change the version just build and test.
+### Privacy in chat
+Your `!c` message is normal game chat: it goes to Jagex's servers and everyone in that channel sees it. Only the **answer** is private. To keep your questions private, make a **Friends Chat channel with only you in it** and ask there.
 
-`modio/` has the mod.io listing text and image, and `PRIVACY.md` is the privacy notice the listing links to.
+**Never type an API key in chat.** If you try (`!c /key ...`), the plugin refuses to save it, tells you to replace the key, and opens the key box instead.
 
-## Notes and limits
+## Your API key: is it safe?
 
-- **Tested against a stubbed API, not in a live client.** `test/harness.py` runs the real bridge against a mock Twitch IRC server and a mock Claude API, then runs `main.lua` in Lua 5.4 with stand-ins for the RS3 API (`pip install lupa`, then `python test/harness.py`). The things most likely to need tweaking in the real client are Move/Size (they use the mouse position, which may not match interface units if UI scaling is on), the wrap width estimate (`CHAR_WIDTH` in `main.lua`), and the font, stylesheet and colour choices.
-- Lines use RS `<col=rrggbb>` tags for name colours. Any `<`/`>` in chat text is escaped as `<lt>`/`<gt>`, so chatters can't inject tags like `<img=…>`.
-- **Security.** The bridge only listens on 127.0.0.1. It refuses any request that doesn't send `X-RS3-Bridge: 1` or that does send an `Origin` header, which stops a web page in your browser from using your Claude credits.
-- **Submitting to mod.io.** A plugin that needs a separately run local program pointed at `127.0.0.1` isn't something Jagex moderation has clear rules on yet. Treat this as a personal/beta plugin for now. If you do submit it, the guidelines expect you to have reviewed and understood all code, AI-assisted included.
-- The plugin only looks at game chat to spot your own `!tw`/`!c` messages. Other players' messages are ignored and nothing about them leaves the game, which keeps it clear of the "no exporting other players' info" rule.
+- **Where it's stored:** in the RS client's plugin settings (`PersistentDB`) on your computer. Jagex isolates each plugin's settings, so other plugins can't read it. It's stored as plain text, though, so anything that can read your files could read it, just like keys kept by most desktop apps.
+- **When it's visible:** while you paste it into the box, because the client doesn't let plugins read masked password fields. Hide the game from your stream while you do this. After that, the plugin only ever shows a masked version (`sk-ant-...wXyZ`).
+- **Where it goes:** only to the provider you chose, over HTTPS, in the request header that provider requires. Never to the developer or anywhere else.
+- **Good habits:** use a key just for this plugin, set a monthly spend limit in your provider's console, and delete the key there if you ever think it's leaked. `!c /forget` removes it from your PC.
+
+## Providers
+
+| Provider | Default model | Key from |
+|---|---|---|
+| Claude (Anthropic) | `claude-haiku-5-5` | console.anthropic.com |
+| OpenAI | `gpt-5.4-mini` | platform.openai.com |
+| Gemini (Google) | `gemini-flash-latest` | aistudio.google.com |
+| OpenRouter | `openrouter/auto` | openrouter.ai: one key for models from many companies |
+| Mistral | `mistral-small-latest` | console.mistral.ai |
+| xAI | (choose with `/model`) | console.x.ai |
+| Groq | `openai/gpt-oss-120b` | console.groq.com |
+| Ollama | (choose with `/model`) | none: runs on your PC (`http://127.0.0.1:11434`) |
+| LM Studio | (choose with `/model`) | none: runs on your PC (`http://127.0.0.1:1234`) |
+
+Model names change often. If a default stops working, set a current one with `!c /model NAME`. Jagex requires every web address a plugin uses to be listed in `plugin.json`, so adding a provider means adding it to `plugin.json` and `providers.lua`.
+
+## How it's built
+
+| File | Purpose |
+|---|---|
+| `plugin/gipity-chat/main.lua` | Reads your `!c` messages, sends requests, writes answers to the chatbox |
+| `plugin/gipity-chat/providers.lua` | The provider list (URLs, request format, default models) |
+| `plugin/gipity-chat/ai.lua` | Builds requests (Anthropic or OpenAI format) and reads replies and errors |
+| `plugin/gipity-chat/json.lua` | Small JSON encoder and decoder (the game's Lua has none) |
+| `plugin/gipity-chat/text.lua` | Converts replies to text the game can draw (accents folded, emoji dropped, markdown removed), escapes RS markup, wraps long lines |
+| `plugin/gipity-chat/setup.lua` | The API key box |
+
+## Tests and releases
+
+`test/plugin_test.py` runs the real plugin files in Lua 5.4 against a stand-in for the RS3 API (`test/stubs.lua`) and a mock AI provider, checking requests, replies, errors, commands and key handling (`pip install lupa`, then `python test/plugin_test.py`). Nothing has been tested in the real game client yet.
+
+GitHub Actions runs the tests on every push. When the `version` in `plugin.json` changes on `main`, it publishes a Release with the plugin zip, ready for mod.io (`main.lua` and `plugin.json` at the top level of the zip).
+
+See also: [PRIVACY.md](PRIVACY.md) · [modio/LISTING.md](modio/LISTING.md)
